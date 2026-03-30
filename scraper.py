@@ -130,19 +130,55 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
             try:
                 name_elem = driver.find_element(By.ID, "Name")
                 name = name_elem.text.strip()
-                roll_noval = driver.find_element(By.ID, "lblRollNoval").text.strip()
+                
+                # Father's name ID is usually lblFatherName
+                try:
+                    father_name = driver.find_element(By.ID, "lblFatherName").text.strip()
+                except:
+                    father_name = "N/A"
+                    
+                # Extract Total Marks securely from the final row of the Marks Grid
+                total_marks = "N/A"
+                try:
+                    # Finds the table, gets all rows, selects last row, selects last column
+                    marks_table = driver.find_element(By.ID, "GridStudentData")
+                    last_row = marks_table.find_elements(By.TAG_NAME, "tr")[-1]
+                    last_cell = last_row.find_elements(By.TAG_NAME, "td")[-1]
+                    total_marks = last_cell.text.strip() # This extracts exactly "PASS 449"
+                except Exception as e:
+                    pass
+                
                 print(f"\n" + "="*50)
-                print(f"🎓 RESULT SUCCESSFULLY EXTRACTED FOR ROLL NO: {roll_noval}")
-                print(f"Name: {name}")
+                print(f"🎓 RESULT SUCCESSFULLY EXTRACTED FOR ROLL NO {roll_no}")
+                print(f"  NAME:           {name}")
+                print(f"  FATHER'S NAME:  {father_name}")
+                print(f"  TOTAL MARKS:    {total_marks}")
                 print("="*50)
                 
-                # Save the page source to an HTML file
-                filename = f"Result_RollNo_{roll_no}.html"
-                with open(filename, "w", encoding="utf-8") as f:
-                    f.write(driver.page_source)
-                print(f"Full result HTML saved to: {filename}")
+                # Save exactly what you asked for to an Excel-friendly CSV file!
+                import csv
+                import os
                 
-                print("\nAutomated process complete! The browser will close in 15 seconds so you can view it.")
+                csv_filename = "Student_Results.csv"
+                file_exists = os.path.isfile(csv_filename)
+                
+                with open(csv_filename, 'a', newline='', encoding='utf-8') as csvfile:
+                    fieldnames = ['Roll_Number', 'Name', 'Father_Name', 'Total_Marks']
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                    
+                    if not file_exists:
+                        writer.writeheader() # Write the columns at the top if file is new
+                        
+                    writer.writerow({
+                        'Roll_Number': roll_no,
+                        'Name': name,
+                        'Father_Name': father_name,
+                        'Total_Marks': total_marks
+                    })
+                
+                print(f"Data saved directly to {csv_filename} instead of downloading HTML!")
+                
+                print("\nAutomated process complete! The browser will close in 15 seconds.")
                 time.sleep(15)
                 driver.quit()
                 return
