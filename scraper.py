@@ -1,0 +1,179 @@
+import time
+import io
+from PIL import Image
+import ddddocr
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import Select
+
+def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='2024'):
+    print("\n" + "="*50)
+    print("🚀 Starting Visual Browser Automation...")
+    print("="*50)
+    
+    print("Loading ddddocr AI model...")
+    ocr = ddddocr.DdddOcr(show_ad=False)
+
+    try:
+        # Try Edge first since it's built into Windows
+        options = webdriver.EdgeOptions()
+        options.add_experimental_option("excludeSwitches", ["enable-logging"])
+        driver = webdriver.Edge(options=options)
+    except:
+        try:
+            # Fallback to Chrome
+            options = webdriver.ChromeOptions()
+            options.add_experimental_option("excludeSwitches", ["enable-logging"])
+            driver = webdriver.Chrome(options=options)
+        except Exception as e:
+            print("[!] Could not start Edge or Chrome. Make sure you have one installed.")
+            print("Error details:", e)
+            return
+
+    wait = WebDriverWait(driver, 10)
+    
+    # Max attempts to retry captcha
+    max_attempts = 5
+    
+    for attempt in range(max_attempts):
+        print(f"\n--- Attempt {attempt + 1} of {max_attempts} ---")
+        driver.get("https://result.biselahore.com/")
+        
+        try:
+            # 1. Wait for Captcha image to appear on screen
+            print("Waiting for page and Captcha to load...")
+            captcha_img_elem = wait.until(EC.presence_of_element_located((By.XPATH, "//img[contains(@src, 'Captcha.aspx')]")))
+            
+            # 2. Take a screenshot of the Captcha element right off the browser
+            # ddddocr is a neural network and handles raw images very well, so we don't need to grayscale it.
+            image_bytes = captcha_img_elem.screenshot_as_png
+            
+            print("Solving Captcha automatically with ddddocr AI...")
+            try:
+                # Ask ddddocr to classify the raw PNG image bytes
+                captcha_text = ocr.classification(image_bytes)
+                
+                # Clean up the extracted text and force it to be uppercase just in case
+                captcha_text = captcha_text.replace(" ", "").replace("\n", "").strip().upper()
+                
+                # We know captchas are generally exactly 6 characters
+                if len(captcha_text) > 6:
+                    captcha_text = captcha_text[:6]
+                
+                print("\n" + "="*60)
+                print(f"  [BOT GUESS] >>> The Captcha is: {captcha_text} <<<")
+                print("="*60 + "\n")
+                
+                if len(captcha_text) != 6:
+                    print(f"Warning: The bot only read {len(captcha_text)} characters instead of the expected 6. We will let it try anyway.")
+                    
+            except Exception as e:
+                print("\n[WARNING] Failed to solve captcha using ddddocr.")
+                print(e)
+                driver.quit()
+                return
+
+            # 3. Fill out the form automatically in the browser
+            print("Filling out form fields...")
+            
+            # Course Radio Button ('rdlistCourse')
+            try:
+                course_elem = driver.find_element(By.XPATH, f"//input[@name='rdlistCourse' and @value='{course}']")
+                course_elem.click()
+            except Exception as e:
+                print(f"Warning: Could not select Course '{course}'. Defaulting to whatever is selected.")
+                
+            # Roll Number
+            roll_input = driver.find_element(By.ID, "txtFormNo")
+            roll_input.clear()
+            roll_input.send_keys(str(roll_no))
+            
+            # Exam Type Dropdown
+            Select(driver.find_element(By.ID, "ddlExamType")).select_by_value(exam_type)
+            
+            # Exam Year Dropdown
+            Select(driver.find_element(By.ID, "ddlExamYear")).select_by_value(str(year))
+            
+            # Captcha Input
+            captcha_input = driver.find_element(By.ID, "txtCaptcha")
+            captcha_input.clear()
+            captcha_input.send_keys(captcha_text)
+            
+            print("Form filled! Pausing for 5 seconds so you can see exactly what the bot typed before it submits...")
+            time.sleep(5) # Give the user time to visibly read the screen
+            driver.find_element(By.ID, "Button1").click()
+            
+            # 4. Check results or errors
+            time.sleep(2) # Give the page a moment to respond
+            
+            try:
+                # Check if error label appears with text
+                error_label = driver.find_element(By.ID, "lblError")
+                error_text = error_label.text.strip()
+                if error_text:
+                    print("Website returned an error:", error_text)
+                    if "Roll No" in error_text:
+                        print("Stopping: Invalid Roll Number.")
+                        driver.quit()
+                        return
+                    else:
+                        print("The ddddocr AI incorrectly guessed the Captcha. Refreshing and retrying...")
+                        continue # loop to next attempt
+            except:
+                pass # No error label exists or is empty, so we probably succeeded!
+                
+            # Check for Success (Result Displayed)
+            try:
+                name_elem = driver.find_element(By.ID, "Name")
+                name = name_elem.text.strip()
+                roll_noval = driver.find_element(By.ID, "lblRollNoval").text.strip()
+                print(f"\n" + "="*50)
+                print(f"🎓 RESULT SUCCESSFULLY EXTRACTED FOR ROLL NO: {roll_noval}")
+                print(f"Name: {name}")
+                print("="*50)
+                
+                # Save the page source to an HTML file
+                filename = f"Result_RollNo_{roll_no}.html"
+                with open(filename, "w", encoding="utf-8") as f:
+                    f.write(driver.page_source)
+                print(f"Full result HTML saved to: {filename}")
+                
+                print("\nAutomated process complete! The browser will close in 15 seconds so you can view it.")
+                time.sleep(15)
+                driver.quit()
+                return
+            except Exception as e:
+                print("Could not find result data on the page. Something unexpected happened.")
+                driver.quit()
+                return
+                
+        except Exception as e:
+            print("An error occurred trying to interact with the page:", e)
+            print("Retrying...")
+
+    print("\n[!] Exhausted all attempts. The ddddocr AI couldn't guess the Captcha correctly.")
+    driver.quit()
+
+
+if __name__ == "__main__":
+    print("-" * 50)
+    print("BISE Lahore Visual Bot")
+    print("-" * 50)
+    
+    roll_number_to_check = input("Enter Roll Number to search (e.g., 123456): ")
+    course_type = input("Enter Course ('SSC' for Matric, 'HSSC' for Inter): ").upper()
+    exam_year = input("Enter Year (e.g., 2024): ")
+    
+    exam_type_input = input("Enter Exam Type ('1' for Part-I, '2' for Part-II): ")
+    if not exam_type_input:
+        exam_type_input = '1'
+        print("Defaulting to Exam Type: 1 (Part-I Annual)")
+    
+    scrape_bise_lahore_selenium(
+        roll_no=roll_number_to_check,
+        course=course_type,
+        exam_type=exam_type_input,
+        year=exam_year
+    )
