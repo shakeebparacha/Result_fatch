@@ -80,10 +80,12 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
             
             # Course Radio Button ('rdlistCourse')
             try:
+                # The website hides the actual radio dot using opacity: 0 to style it as a custom checkmark.
+                # Selenium's standard .click() fails on invisible inputs, so we enforce it using Javascript!
                 course_elem = driver.find_element(By.XPATH, f"//input[@name='rdlistCourse' and @value='{course}']")
-                course_elem.click()
+                driver.execute_script("arguments[0].click();", course_elem)
             except Exception as e:
-                print(f"Warning: Could not select Course '{course}'. Defaulting to whatever is selected.")
+                print(f"Warning: Could not select Course. Error: {e}")
                 
             # Roll Number
             roll_input = driver.find_element(By.ID, "txtFormNo")
@@ -163,13 +165,29 @@ if __name__ == "__main__":
     print("-" * 50)
     
     roll_number_to_check = input("Enter Roll Number to search (e.g., 123456): ")
-    course_type = input("Enter Course ('SSC' for Matric, 'HSSC' for Inter): ").upper()
-    exam_year = input("Enter Year (e.g., 2024): ")
+    # Matric / Intermediate
+    print("\n--- Select Course ---")
+    course_type = input("Enter 'SSC' for Matric, or 'HSSC' for Intermediate (Default is HSSC): ").upper()
+    if not course_type or course_type not in ['SSC', 'HSSC']:
+        course_type = 'HSSC'
+        print("Defaulting to: HSSC (Intermediate)")
+
+    # Exam Year
+    print("\n--- Select Year ---")
+    exam_year = input("Enter Year (e.g., 2024 or 2025): ")
+    if not exam_year:
+        exam_year = '2024'
+        print("Defaulting to: 2024")
     
-    exam_type_input = input("Enter Exam Type ('1' for Part-I, '2' for Part-II): ")
-    if not exam_type_input:
-        exam_type_input = '1'
-        print("Defaulting to Exam Type: 1 (Part-I Annual)")
+    # Exam Type (Part-1, Part-II, Suppy)
+    print("\n--- Select Exam Type ---")
+    print("0 = Supplementary")
+    print("1 = Part-I (Annual)")
+    print("2 = Part-II (Annual)")
+    exam_type_input = input("Enter Exam Type (0, 1, or 2): ")
+    if not exam_type_input or exam_type_input not in ['0', '1', '2']:
+        exam_type_input = '2'
+        print("Defaulting to: 2 (Part-II Annual)")
     
     scrape_bise_lahore_selenium(
         roll_no=roll_number_to_check,
