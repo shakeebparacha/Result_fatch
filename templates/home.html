@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Student Results Platform{% endblock %}
+{% block home_active %}active{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div class="hero-content">
+        <h1>Student Results Platform</h1>
+        <p>Organize, visualize, and manage student results with ease</p>
+        
+        <div class="hero-buttons">
+            <a href="/results" class="btn btn-primary">View Results</a>
+            <a href="/graphs" class="btn btn-secondary">View Charts</a>
+        </div>
+    </div>
+</section>
+
+<!-- Quick Download & Upload Section -->
+<section class="quick-actions">
+    <div class="container">
+        <div class="section-title">
+            <h2>Get Started</h2>
+            <p>Download the sample format and upload your student data</p>
+        </div>
+
+        <div class="actions-grid">
+            <!-- Download Sample -->
+            <div class="action-card">
+                <div class="icon">📥</div>
+                <h3>Download Sample</h3>
+                <p>Get a CSV template with the required format</p>
+                <a href="/api/download-sample" class="btn btn-outline" download>
+                    Download Template
+                </a>
+            </div>
+
+            <!-- Upload CSV -->
+            <div class="action-card">
+                <div class="icon">📤</div>
+                <h3>Upload Your Data</h3>
+                <p>Upload student roll numbers in CSV format</p>
+                <a href="/results" class="btn btn-outline">Go to Upload</a>
+            </div>
+
+            <!-- Run Scraper -->
+            <div class="action-card">
+                <div class="icon">🤖</div>
+                <h3>Run Scraper</h3>
+                <p>Automatically fetch results from BISE</p>
+                <a href="/scraper" class="btn btn-outline">Start Scraper</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Features Section -->
+<section class="features">
+    <div class="container">
+        <div class="section-title">
+            <h2>Features</h2>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <h3>📊 Data Management</h3>
+                <p>Upload, manage, and organize student results with an intuitive interface</p>
+            </div>
+            <div class="feature-card">
+                <h3>📈 Visualizations</h3>
+                <p>View comprehensive charts and graphs of student performance</p>
+            </div>
+            <div class="feature-card">
+                <h3>🤖 Auto Scraper</h3>
+                <p>Automatically fetch results from BISE for multiple students</p>
+            </div>
+            <div class="feature-card">
+                <h3>📱 Mobile Friendly</h3>
+                <p>Works seamlessly on phones, tablets, and desktops</p>
+            </div>
+            <div class="feature-card">
+                <h3>⚡ Fast & Reliable</h3>
+                <p>Quick data processing and secure file handling</p>
+            </div>
+            <div class="feature-card">
+                <h3>📥 CSV Support</h3>
+                <p>Easy import/export with CSV file format support</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}

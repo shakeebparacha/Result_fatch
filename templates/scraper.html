@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Scraper - Student Results Platform{% endblock %}
+{% block scraper_active %}active{% endblock %}
+
+{% block content %}
+<section class="scraper-section">
+    <div class="container">
+        <div class="scraper-wrapper">
+            <div class="scraper-header">
+                <h1>BISE Result Scraper</h1>
+                <p>Automate your result extraction from BISE Lahore portal</p>
+            </div>
+
+            <form id="scraperForm" class="scraper-form">
+                <div class="form-group">
+                    <label for="rollNumbers">Roll Numbers</label>
+                    <textarea 
+                        id="rollNumbers" 
+                        class="form-control" 
+                        placeholder="e.g. 123456, 123457 or range 123456-123460"
+                        required
+                    ></textarea>
+                    <span class="helper-text">
+                        Enter a single roll number, comma-separated values, or a range (e.g. 100-150).
+                    </span>
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="courseType">Course / Level</label>
+                        <select id="courseType" class="form-control">
+                            <option value="HSSC">Intermediate (HSSC)</option>
+                            <option value="SSC">Matriculation (SSC)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="examYear">Exam Year</label>
+                        <input 
+                            type="number" 
+                            id="examYear" 
+                            class="form-control" 
+                            value="2024" 
+                            min="2000" 
+                            max="2100" 
+                            required
+                        >
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="examType">Exam Type</label>
+                    <select id="examType" class="form-control">
+                        <option value="2">Part-II (Annual)</option>
+                        <option value="1">Part-I (Annual)</option>
+                        <option value="0">Supplementary</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-large" id="submitBtn">
+                    <span>Start Scraping Automation</span>
+                    <div class="spinner" style="display: none;"></div>
+                </button>
+            </form>
+
+            <!-- Terminal Output -->
+            <div class="terminal" id="terminal">
+                <div class="terminal-header">
+                    <span>System Output</span>
+                    <button type="button" class="terminal-close" onclick="document.getElementById('terminal').style.display='none'">✕</button>
+                </div>
+                <div class="terminal-content" id="terminalContent">
+                    <div class="terminal-line terminal-info">> System initialized. Ready to process.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/scraper.js') }}"></script>
+{% endblock %}

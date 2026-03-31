@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Results - Student Results Platform{% endblock %}
+{% block results_active %}active{% endblock %}
+
+{% block content %}
+<section class="results-section">
+    <div class="container">
+        <div class="section-header">
+            <h1>Student Results</h1>
+            <p>Manage and view all student records in one place</p>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <div class="upload-card">
+                <h3>📤 Upload CSV File</h3>
+                <p>Upload a CSV file to replace your current data. Required column: <strong>Roll_Number</strong></p>
+                
+                <div class="upload-area" id="uploadArea">
+                    <input type="file" id="fileInput" accept=".csv" hidden>
+                    <div class="upload-content">
+                        <div class="upload-icon">📁</div>
+                        <p>Drag & drop your CSV file here</p>
+                        <span>or</span>
+                        <button type="button" class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                            Choose File
+                        </button>
+                    </div>
+                </div>
+                <div id="uploadStatus"></div>
+                <div class="upload-actions">
+                    <a href="/api/download-sample" class="btn btn-outline btn-small" download>
+                        📥 Download Sample
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls & Search -->
+        <div class="controls-section">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="🔍 Search by Roll Number or Name..." class="search-input">
+            </div>
+
+            <div class="controls-right">
+                <select id="rowsPerPage" class="select-control">
+                    <option value="10">10 rows</option>
+                    <option value="25">25 rows</option>
+                    <option value="50">50 rows</option>
+                    <option value="100">100 rows</option>
+                </select>
+
+                <button id="exportBtn" class="btn btn-outline btn-small">
+                    📊 Export CSV
+                </button>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-wrapper">
+            <div id="loadingSpinner" class="loading-spinner" style="display: none;">
+                <div class="spinner"></div>
+                <p>Loading results...</p>
+            </div>
+
+            <table class="results-table" id="resultsTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortTable(0)">Roll Number <span class="sort-icon">⬍</span></th>
+                        <th onclick="sortTable(1)">Name <span class="sort-icon">⬍</span></th>
+                        <th onclick="sortTable(2)">Father Name <span class="sort-icon">⬍</span></th>
+                        <th onclick="sortTable(3)">Marks/Status <span class="sort-icon">⬍</span></th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr><td colspan="4" class="no-data">No data available. Upload a CSV file to get started.</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="pagination"></div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/results.js') }}"></script>
+{% endblock %}

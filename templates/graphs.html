@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Graphs - Student Results Platform{% endblock %}
+{% block graphs_active %}active{% endblock %}
+
+{% block content %}
+<section class="graphs-section">
+    <div class="container">
+        <div class="section-header">
+            <h1>Data Visualizations</h1>
+            <p>Visual analysis of student performance and results</p>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">👥</div>
+                <div class="stat-content">
+                    <h3 id="totalStudents">0</h3>
+                    <p>Total Students</p>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon">✅</div>
+                <div class="stat-content">
+                    <h3 id="passCount">0</h3>
+                    <p>Passed</p>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon">❌</div>
+                <div class="stat-content">
+                    <h3 id="failCount">0</h3>
+                    <p>Failed/Absent</p>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-content">
+                    <h3 id="passPercentage">0%</h3>
+                    <p>Pass Rate</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Container -->
+        <div class="charts-grid">
+            <!-- Pass/Fail Distribution -->
+            <div class="chart-card">
+                <h3>Pass/Fail Distribution</h3>
+                <canvas id="pieChart"></canvas>
+            </div>
+
+            <!-- Total Students Bar -->
+            <div class="chart-card">
+                <h3>Student Status Breakdown</h3>
+                <canvas id="barChart"></canvas>
+            </div>
+        </div>
+
+        <!-- No Data Message -->
+        <div id="noDataMessage" class="no-data-message" style="display: none;">
+            <div class="empty-state">
+                <p>📭 No data available</p>
+                <p>Upload a CSV file in the <a href="/results">Results</a> section to see visualizations</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/graphs.js') }}"></script>
+{% endblock %}
