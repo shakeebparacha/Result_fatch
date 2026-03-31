@@ -178,8 +178,8 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
                 
                 print(f"Data saved directly to {csv_filename} instead of downloading HTML!")
                 
-                print("\nAutomated process complete! The browser will close in 15 seconds.")
-                time.sleep(15)
+                print("\nStudent scraped successfully! Closing browser and moving to next...")
+                time.sleep(3)
                 driver.quit()
                 return
             except Exception as e:
@@ -200,7 +200,28 @@ if __name__ == "__main__":
     print("BISE Lahore Visual Bot")
     print("-" * 50)
     
-    roll_number_to_check = input("Enter Roll Number to search (e.g., 123456): ")
+    print("\n--- Enter Roll Numbers ---")
+    print("You can enter a single number (123456), multiple numbers split by a comma (123456, 123457),")
+    print("or a range (123456-123460) to scrape multiple students in a row!")
+    roll_input = input("Roll Numbers: ")
+    
+    roll_numbers_to_check = []
+    for part in roll_input.split(','):
+        part = part.strip()
+        if '-' in part:
+            try:
+                start, end = part.split('-')
+                roll_numbers_to_check.extend(range(int(start), int(end) + 1))
+            except:
+                pass
+        elif part.isdigit():
+            roll_numbers_to_check.append(int(part))
+            
+    if not roll_numbers_to_check:
+        print("No valid roll numbers provided. Exiting.")
+        import sys
+        sys.exit()
+
     # Matric / Intermediate
     print("\n--- Select Course ---")
     course_type = input("Enter 'SSC' for Matric, or 'HSSC' for Intermediate (Default is HSSC): ").upper()
@@ -225,9 +246,16 @@ if __name__ == "__main__":
         exam_type_input = '2'
         print("Defaulting to: 2 (Part-II Annual)")
     
-    scrape_bise_lahore_selenium(
-        roll_no=roll_number_to_check,
-        course=course_type,
-        exam_type=exam_type_input,
-        year=exam_year
-    )
+    print(f"\n[!] Preparing to scrape {len(roll_numbers_to_check)} roll numbers in sequence...")
+    for index, roll in enumerate(roll_numbers_to_check):
+        print(f"\n{'#'*60}")
+        print(f"# Processing Student {index + 1} of {len(roll_numbers_to_check)} (Roll No: {roll})")
+        print(f"{'#'*60}")
+        scrape_bise_lahore_selenium(
+            roll_no=str(roll),
+            course=course_type,
+            exam_type=exam_type_input,
+            year=exam_year
+        )
+    
+    print("\nAll requested roll numbers have been processed! Check Student_Results.csv!")
