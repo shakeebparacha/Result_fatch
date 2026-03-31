@@ -695,6 +695,10 @@ select.form-control option {
     color: var(--text-main);
 }
 
+.chart-card-full {
+    grid-column: 1 / -1;
+}
+
 .no-data-message {
     text-align: center;
     padding: 3rem 2rem;

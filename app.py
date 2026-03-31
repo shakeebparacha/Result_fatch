@@ -8,7 +8,22 @@ from datetime import datetime
 
 app = Flask(__name__, template_folder='templates')
 
-CSV_FILE = 'Student_Results.csv'
+# Ensure Student_Results.csv is in the correct location
+CSV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Student_Results.csv')
+
+# ================== INITIALIZATION ==================
+def initialize_csv():
+    """Clear CSV file on app startup with headers only"""
+    try:
+        with open(CSV_FILE, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=['Roll_Number', 'Name', 'Father_Name', 'Total_Marks', 'Status'])
+            writer.writeheader()
+        print(f"✓ CSV initialized (cleared on startup): {CSV_FILE}")
+    except Exception as e:
+        print(f"✗ Error initializing CSV: {e}")
+
+# Initialize CSV on app startup
+initialize_csv()
 
 # ================== ROUTES ==================
 
