@@ -35,7 +35,7 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
     wait = WebDriverWait(driver, 10)
     
     # Max attempts to retry captcha
-    max_attempts = 5
+    max_attempts = 8
     
     for attempt in range(max_attempts):
         print(f"\n--- Attempt {attempt + 1} of {max_attempts} ---")
