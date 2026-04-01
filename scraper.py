@@ -19,7 +19,7 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
     try:
         # Try Edge first since it's built into Windows
         options = webdriver.EdgeOptions()
-        options.add_argument('--headless')
+        # options.add_argument('--headless') # Uncomment this before deploying to Render!
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_experimental_option("excludeSwitches", ["enable-logging"])  
@@ -28,7 +28,7 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
         try:
             # Fallback to Chrome
             options = webdriver.ChromeOptions()
-            options.add_argument('--headless')
+            # options.add_argument('--headless') # Uncomment this before deploying to Render!
             options.add_argument('--no-sandbox')
             options.add_argument('--disable-dev-shm-usage')
             options.add_argument('--disable-gpu') # necessary for headless servers

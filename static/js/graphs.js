@@ -201,62 +201,48 @@ function renderStudentPerformanceChart(results) {
         studentPerformanceChart.destroy();
     }
 
-    // Prepare data - sort by roll number or name in descending order
+    // Prepare data - extract numeric marks and sort by them
     const studentData = results
         .filter(row => row.Roll_Number && row.Name)
-        .map(row => ({
-            rollNumber: row.Roll_Number,
-            name: row.Name || 'Unknown',
-            marks: row.Total_Marks || 'N/A'
-        }))
-        .sort((a, b) => {
-            // Sort by roll number descending
-            return parseInt(b.rollNumber) - parseInt(a.rollNumber);
+        .map(row => {
+            const marksStr = row.Total_Marks ? String(row.Total_Marks) : '';
+            // Try to extract numbers from string like "PASS 518", otherwise 0
+            const numericMatch = marksStr.match(/\d+/);
+            const numericMarks = numericMatch ? parseInt(numericMatch[0]) : 0;
+            
+            return {
+                rollNumber: parseInt(row.Roll_Number) || 0,
+                name: row.Name || 'Unknown',
+                rawMarks: marksStr,
+                numericMarks: numericMarks
+            };
         })
-        .slice(0, 15); // Show top 15 students
+        .filter(s => s.numericMarks > 0); // Only plot students with valid numeric marks
 
-    const labels = studentData.map(s => s.rollNumber);
-    const names = studentData.map(s => s.name);
-    
-    // Create gradient colors for attractiveness
-    const colors = [
-        'rgba(79, 70, 229, 0.8)',  // Indigo
-        'rgba(59, 130, 246, 0.8)', // Blue
-        'rgba(34, 197, 94, 0.8)',  // Green
-        'rgba(16, 185, 129, 0.8)', // Teal
-        'rgba(6, 182, 212, 0.8)',  // Cyan
-        'rgba(139, 92, 246, 0.8)', // Purple
-        'rgba(168, 85, 247, 0.8)', // Violet
-        'rgba(236, 72, 153, 0.8)', // Pink
-        'rgba(249, 115, 22, 0.8)', // Orange
-        'rgba(234, 179, 8, 0.8)',  // Yellow
-        'rgba(244, 63, 94, 0.8)',  // Rose
-        'rgba(14, 165, 233, 0.8)', // Sky
-        'rgba(34, 197, 94, 0.8)',  // Lime
-        'rgba(249, 115, 22, 0.8)', // Amber
-        'rgba(239, 68, 68, 0.8)'   // Red
-    ];
-
-    const borderColors = colors.map(c => c.replace('0.8', '1'));
+    // Create scatter data points
+    const scatterData = studentData.map(s => ({
+        x: s.rollNumber,
+        y: s.numericMarks,
+        name: s.name,
+        rawMarks: s.rawMarks
+    }));
 
     studentPerformanceChart = new Chart(ctx, {
-        type: 'bar',
+        type: 'scatter',
         data: {
-            labels: labels,
             datasets: [{
-                label: 'Student List',
-                data: labels.map((_, i) => i + 1), // Just for visual height
-                backgroundColor: colors,
-                borderColor: borderColors,
-                borderWidth: 2,
-                borderRadius: 8,
-                hoverBackgroundColor: colors.map(c => c.replace('0.8', '0.95')),
+                label: 'Student Marks',
+                data: scatterData,
+                backgroundColor: 'rgba(99, 102, 241, 0.8)', // Indigo
+                borderColor: 'rgba(79, 70, 229, 1)',
+                pointRadius: 6,
+                pointHoverRadius: 8,
+                borderWidth: 2
             }]
         },
         options: {
-            indexAxis: 'y',
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: {
                     display: false
@@ -270,37 +256,44 @@ function renderStudentPerformanceChart(results) {
                     padding: 12,
                     displayColors: false,
                     callbacks: {
-                        title: function(tooltipItems) {
-                            const index = tooltipItems[0].dataIndex;
-                            return 'Roll Number: ' + names[index];
-                        },
-                        label: function(tooltipItem) {
-                            const index = tooltipItem.dataIndex;
-                            return 'Name: ' + names[index];
-                        },
-                        afterLabel: function(tooltipItem) {
-                            const index = tooltipItem.dataIndex;
-                            return 'Status: ' + studentData[index].marks;
+                        label: function(context) {
+                            const point = context.raw;
+                            return [
+                                'Name: ' + point.name,
+                                'Roll No: ' + point.x,
+                                'Status/Marks: ' + point.rawMarks
+                            ];
                         }
                     }
                 }
             },
             scales: {
                 x: {
-                    display: false,
-                    beginAtZero: true,
-                },
-                y: {
+                    title: {
+                        display: true,
+                        text: 'Roll Number',
+                        color: '#f8fafc'
+                    },
                     grid: {
-                        display: false
+                        color: 'rgba(255, 255, 255, 0.1)',
                     },
                     ticks: {
                         color: '#94a3b8',
-                        font: {
-                            family: "'Poppins', sans-serif",
-                            size: 12,
-                            weight: 'bold'
-                        }
+                        font: { family: "'Poppins', sans-serif" }
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Total Marks',
+                        color: '#f8fafc'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    },
+                    ticks: {
+                        color: '#94a3b8',
+                        font: { family: "'Poppins', sans-serif" }
                     }
                 }
             }
