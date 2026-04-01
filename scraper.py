@@ -19,17 +19,27 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
     try:
         # Try Edge first since it's built into Windows
         options = webdriver.EdgeOptions()
-        options.add_experimental_option("excludeSwitches", ["enable-logging"])
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_experimental_option("excludeSwitches", ["enable-logging"])  
         driver = webdriver.Edge(options=options)
     except:
         try:
             # Fallback to Chrome
             options = webdriver.ChromeOptions()
+            options.add_argument('--headless')
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--disable-gpu') # necessary for headless servers
+            options.add_argument('--window-size=1920,1080')
             options.add_experimental_option("excludeSwitches", ["enable-logging"])
+            
+            # Use Selenium Manager (Selenium 4.10+) which will try to find Chrome in PATH 
             driver = webdriver.Chrome(options=options)
         except Exception as e:
             print("[!] Could not start Edge or Chrome. Make sure you have one installed.")
-            print("Error details:", e)
+            print("Error details:", str(e))
             return
 
     wait = WebDriverWait(driver, 10)
