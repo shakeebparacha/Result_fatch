@@ -27,6 +27,15 @@ initialize_csv()
 
 # ================== ROUTES ==================
 
+# Global dictionary to track scraping progress
+scraping_status = {
+    "is_running": False,
+    "total": 0,
+    "processed": 0,
+    "success": 0,
+    "message": ""
+}
+
 @app.route('/')
 def home():
     """Home page"""
@@ -167,6 +176,7 @@ def get_graph_data():
 
 def background_scraper(roll_numbers, course, exam_year, exam_type_val):
     """Background scraper worker"""
+    global scraping_status
     roll_list = []
     for part in roll_numbers.split(','):
         part = part.strip()
@@ -177,20 +187,37 @@ def background_scraper(roll_numbers, course, exam_year, exam_type_val):
             except: pass
         elif part.isdigit():
             roll_list.append(int(part))
-            
-    print(f"[!] Background worker starting! Processing {len(roll_list)} target(s)...")
+
+    total = len(roll_list)
+    scraping_status["is_running"] = True
+    scraping_status["total"] = total
+    scraping_status["processed"] = 0
+    scraping_status["success"] = 0
+    scraping_status["message"] = f"Initializing scraper for {total} roll numbers..."
+
+    print(f"[!] Background worker starting! Processing {total} target(s)...")
     for roll in roll_list:
-        scrape_bise_lahore_selenium(
-            roll_no=str(roll), 
-            course=course, 
-            exam_type=exam_type_val, 
+        scraping_status["message"] = f"Processing Roll No: {roll} ({scraping_status['processed'] + 1}/{total})"
+        is_success = scrape_bise_lahore_selenium(
+            roll_no=str(roll),
+            course=course,
+            exam_type=exam_type_val,
             year=exam_year
         )
+        if is_success:
+            scraping_status["success"] += 1
+        scraping_status["processed"] += 1
+
+    scraping_status["message"] = f"Finished! Successfully scraped {scraping_status['success']} out of {total} roll numbers."
+    scraping_status["is_running"] = False
     print("\n[!] Background worker finished completely.")
 
 @app.route('/api/scrape', methods=['POST'])
 def start_scraping():
     """Start background scraping task"""
+    global scraping_status
+    if scraping_status["is_running"]:
+        return jsonify({"status": "error", "message": "A scraping task is already running."}), 400
     try:
         data = request.json
         roll_numbers = data.get('rollNumbers', '')
@@ -204,10 +231,16 @@ def start_scraping():
         
         return jsonify({
             "status": "success",
-            "message": "Bot is starting! Check the terminal for progress..."
+            "message": "Bot is starting! Check the tracking log below..."
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/scrape-status', methods=['GET'])
+def scrape_status():
+    """Get the current progress of the scraper"""
+    global scraping_status
+    return jsonify(scraping_status)
 
 # ================== ERROR HANDLERS ==================
 

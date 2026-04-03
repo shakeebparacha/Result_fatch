@@ -40,7 +40,7 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
         except Exception as e:
             print("[!] Could not start Edge or Chrome. Make sure you have one installed.")
             print("Error details:", str(e))
-            return
+            return False
 
     wait = WebDriverWait(driver, 10)
     
@@ -83,7 +83,7 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
                 print("\n[WARNING] Failed to solve captcha using ddddocr.")
                 print(e)
                 driver.quit()
-                return
+                return False
 
             # 3. Fill out the form automatically in the browser
             print("Filling out form fields...")
@@ -129,7 +129,7 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
                     if "Roll No" in error_text:
                         print("Stopping: Invalid Roll Number.")
                         driver.quit()
-                        return
+                        return False
                     else:
                         print("The ddddocr AI incorrectly guessed the Captcha. Refreshing and retrying...")
                         continue # loop to next attempt
@@ -245,11 +245,11 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
                 print("\nStudent scraped successfully! Closing browser and moving to next...")
                 time.sleep(3)
                 driver.quit()
-                return
+                return True
             except Exception as e:
                 print("Could not find result data on the page. Something unexpected happened.")
                 driver.quit()
-                return
+                return False
                 
         except Exception as e:
             print("An error occurred trying to interact with the page:", e)
@@ -257,6 +257,7 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
 
     print("\n[!] Exhausted all attempts. The ddddocr AI couldn't guess the Captcha correctly.")
     driver.quit()
+    return False
 
 
 if __name__ == "__main__":
@@ -311,15 +312,22 @@ if __name__ == "__main__":
         print("Defaulting to: 2 (Part-II Annual)")
     
     print(f"\n[!] Preparing to scrape {len(roll_numbers_to_check)} roll numbers in sequence...")
+    success_count = 0
     for index, roll in enumerate(roll_numbers_to_check):
         print(f"\n{'#'*60}")
         print(f"# Processing Student {index + 1} of {len(roll_numbers_to_check)} (Roll No: {roll})")
         print(f"{'#'*60}")
-        scrape_bise_lahore_selenium(
+        success = scrape_bise_lahore_selenium(
             roll_no=str(roll),
             course=course_type,
             exam_type=exam_type_input,
             year=exam_year
         )
+        if success:
+            success_count += 1
     
-    print("\nAll requested roll numbers have been processed! Check Student_Results.csv!")
+    print("\n" + "="*50)
+    print(f"🎉 Scraping Complete!")
+    print(f"Successfully processed {success_count} out of {len(roll_numbers_to_check)} roll numbers.")
+    print("="*50)
+    print("Check Student_Results.csv for the data!")

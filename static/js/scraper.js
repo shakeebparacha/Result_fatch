@@ -50,16 +50,48 @@ function handleScraperSubmit(e) {
         if (data.status === 'success') {
             logToTerminal(`> Roll Numbers: ${rollNumbers}`, 'terminal-info');
             logToTerminal(`> ${data.message}`, 'terminal-success');
+            startPollingStatus();
         } else {
             logToTerminal(`> Error: ${data.message}`, 'terminal-warning');
         }
-        submitBtn.classList.remove('loading');
     })
     .catch(error => {
         logToTerminal(`> Error: Failed to connect to backend!`, 'terminal-warning');
         logToTerminal(`> Is app.py running?`, 'terminal-warning');
+    })
+    .finally(() => {
         submitBtn.classList.remove('loading');
     });
+}
+
+function startPollingStatus() {
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true; // Prevent multiple requests
+    
+    let lastMessage = "";
+    
+    const intervalId = setInterval(() => {
+        fetch('/api/scrape-status')
+            .then(res => res.json())
+            .then(status => {
+                if (status.message && status.message !== lastMessage) {
+                    logToTerminal(`> ${status.message}`, 'terminal-info');
+                    lastMessage = status.message;
+                }
+                
+                if (!status.is_running && status.total > 0) {
+                    clearInterval(intervalId);
+                    submitBtn.disabled = false;
+                    logToTerminal(`> Done! Successfully processed ${status.success} out of ${status.total} students.`, 'terminal-success');
+                    logToTerminal(`> Please check the '/results' page to view and visualize the newly added data.`, 'terminal-warning');
+                }
+            })
+            .catch(err => {
+                clearInterval(intervalId);
+                submitBtn.disabled = false;
+                logToTerminal(`> Status check failed or server disconnected.`, 'terminal-warning');
+            });
+    }, 2000); // Check every 2 seconds
 }
 
 function logToTerminal(message, className = 'terminal-info') {
