@@ -56,8 +56,9 @@ function setupFileUpload() {
 function handleFileUpload(file, uploadStatus) {
     if (!file) return;
 
-    if (!file.name.endsWith('.csv')) {
-        showUploadStatus('Only CSV files are allowed', 'error', uploadStatus);
+    const ext = file.name.toLowerCase().split('.').pop();
+    if (!['csv', 'xlsx', 'xls'].includes(ext)) {
+        showUploadStatus('Only CSV and Excel files (.xls/.xlsx) are allowed', 'error', uploadStatus);
         return;
     }
 

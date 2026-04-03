@@ -4,6 +4,7 @@ import threading
 import csv
 import os
 import io
+import pandas as pd
 from datetime import datetime
 
 app = Flask(__name__, template_folder='templates')
@@ -73,37 +74,45 @@ def get_results():
 
 @app.route('/api/upload-csv', methods=['POST'])
 def upload_csv():
-    """Upload and overwrite CSV file"""
+    """Upload and overwrite CSV or Excel file"""
     try:
         if 'file' not in request.files:
             return jsonify({"status": "error", "message": "No file provided"}), 400
-        
+
         file = request.files['file']
         if file.filename == '':
             return jsonify({"status": "error", "message": "No file selected"}), 400
-        
-        if not file.filename.endswith('.csv'):
-            return jsonify({"status": "error", "message": "Only CSV files are allowed"}), 400
-        
-        # Read and validate CSV
-        stream = io.TextIOWrapper(file.stream, encoding='utf-8')
-        reader = csv.DictReader(stream)
-        rows = list(reader)
-        
+
+        ext = file.filename.lower().split('.')[-1]
+        if ext not in ['csv', 'xlsx', 'xls']:
+            return jsonify({"status": "error", "message": "Only CSV and Excel files (.xls/.xlsx) are allowed"}), 400
+
+        # Read and validate File
+        if ext == 'csv':
+            stream = io.TextIOWrapper(file.stream, encoding='utf-8')
+            reader = csv.DictReader(stream)
+            fieldnames = reader.fieldnames
+            rows = list(reader)
+        else:
+            # Excel handler
+            df = pd.read_excel(file.stream)
+            df = df.fillna('') # Handle empty cells
+            fieldnames = list(df.columns)
+            rows = df.to_dict('records')
+
         if not rows:
-            return jsonify({"status": "error", "message": "CSV file is empty"}), 400
-        
+            return jsonify({"status": "error", "message": "File is empty"}), 400
+
         # Check for required column
-        if 'Roll_Number' not in reader.fieldnames:
-            return jsonify({"status": "error", "message": "CSV must contain 'Roll_Number' column"}), 400
-        
+        if 'Roll_Number' not in fieldnames:
+            return jsonify({"status": "error", "message": "File must contain 'Roll_Number' column"}), 400
+
         # Overwrite CSV file
         with open(CSV_FILE, 'w', newline='', encoding='utf-8') as f:
-            fieldnames = reader.fieldnames
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(rows)
-        
+
         return jsonify({
             "status": "success",
             "message": f"Successfully uploaded {len(rows)} records",
