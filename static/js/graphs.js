@@ -29,10 +29,10 @@ function loadGraphData() {
             let failCount = 0;
 
             results.forEach(row => {
-                const marks = String(row.Total_Marks || '').toLowerCase();
-                if (marks.includes('pass')) {
+                const status = String(row.Status || '').toUpperCase();
+                if (status === 'PASS') {
                     passCount++;
-                } else if (marks.length > 0) {
+                } else if (status === 'FAIL') {
                     failCount++;
                 }
             });
@@ -242,7 +242,17 @@ function renderStudentPerformanceChart(results) {
         }
     });
 
-    const labels = Object.keys(subjectStats);
+    let labels = Object.keys(subjectStats);
+    
+    // Sort labels by pass ratio 
+    labels.sort((a, b) => {
+        const totalA = subjectStats[a].pass + subjectStats[a].fail;
+        const totalB = subjectStats[b].pass + subjectStats[b].fail;
+        const ratioA = totalA > 0 ? subjectStats[a].pass / totalA : 0;
+        const ratioB = totalB > 0 ? subjectStats[b].pass / totalB : 0;
+        return ratioB - ratioA; // Descending order
+    });
+
     const passData = labels.map(l => subjectStats[l].pass);
     const failData = labels.map(l => subjectStats[l].fail);
 
