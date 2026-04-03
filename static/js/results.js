@@ -284,16 +284,37 @@ function renderTable() {
     const endIdx = startIdx + rowsPerPage;
     const pageData = filteredData.slice(startIdx, endIdx);
 
-    tableBody.innerHTML = pageData.map(row => `
+    tableBody.innerHTML = pageData.map(row => {
+        let displaySubjectPass = row.Subject_Pass || '-';
+        if (displaySubjectPass && displaySubjectPass !== '-' && displaySubjectPass !== 'All Pass' && displaySubjectPass.includes(':')) {
+            const upcased = displaySubjectPass.toUpperCase();
+            if (!upcased.includes('FAIL')) {
+                displaySubjectPass = 'Pass all Subject';
+            } else {
+                const failedSubjects = [];
+                const subjects = displaySubjectPass.split(',');
+                subjects.forEach(s => {
+                    const parts = s.split(':');
+                    if (parts.length >= 2 && parts[1].trim().toUpperCase().includes('FAIL')) {
+                        failedSubjects.push(parts[0].trim());
+                    }
+                });
+                if (failedSubjects.length > 0) {
+                    displaySubjectPass = failedSubjects.join(', ');
+                }
+            }
+        }
+        
+        return `
         <tr>
             <td>${row.Roll_Number || '-'}</td>
             <td>${row.Name || '-'}</td>
             <td>${row.Father_Name || '-'}</td>
             <td><strong>${row.Total_Marks || '-'}</strong></td>
             <td><div class="status-badge ${row.Status === 'PASS' ? 'success' : 'danger'}">${row.Status || '-'}</div></td>
-            <td>${row.Subject_Pass || '-'}</td>
+            <td>${displaySubjectPass}</td>
         </tr>
-    `).join('');
+    `}).join('');
 
     renderPagination();
 }

@@ -192,105 +192,109 @@ function renderBarChart(passCount, failCount, total) {
     });
 }
 
-    // Check for subject group filter
-    const filterElem = document.getElementById('subjectGroupFilter');
-    if (filterElem && !filterElem.hasEventListener) {
-        filterElem.addEventListener('change', loadGraphData);
-        filterElem.hasEventListener = true;
-    }
-
 function renderStudentPerformanceChart(results) {
     const ctx = document.getElementById('studentPerformanceChart');
     if (!ctx) return;
 
+    // Destroy existing chart
     if (studentPerformanceChart) {
         studentPerformanceChart.destroy();
     }
 
-    const filterVal = document.getElementById('subjectGroupFilter') ? document.getElementById('subjectGroupFilter').value : 'all';
-    const scienceSubjectsList = ["PHYSICS", "CHEMISTRY", "MATH", "MATHEMATICS", "BIOLOGY", "COMPUTER", "STATISTICS"];
+    // Prepare data - extract numeric marks and sort by them
+    const studentData = results
+        .filter(row => row.Roll_Number && row.Name)
+        .map(row => {
+            const marksStr = row.Total_Marks ? String(row.Total_Marks) : '';
+            // Try to extract numbers from string like "PASS 518", otherwise 0
+            const numericMatch = marksStr.match(/\d+/);
+            const numericMarks = numericMatch ? parseInt(numericMatch[0]) : 0;
+            
+            return {
+                rollNumber: parseInt(row.Roll_Number) || 0,
+                name: row.Name || 'Unknown',
+                rawMarks: marksStr,
+                numericMarks: numericMarks
+            };
+        })
+        .filter(s => s.numericMarks > 0); // Only plot students with valid numeric marks
 
-    // parse subject pass column to accumulate pass / fails for each subject
-    // format expected: "English:PASS, URDU:FAIL"
-    const subjectStats = {};
-
-    results.forEach(row => {
-        const subjectPassRaw = row.Subject_Pass || "";
-        if (subjectPassRaw && subjectPassRaw !== "All Pass" && subjectPassRaw.includes(":")) {
-            const subjects = subjectPassRaw.split(",");
-            subjects.forEach(s => {
-                const parts = s.split(":");
-                if (parts.length >= 2) {
-                    const subjName = parts[0].trim().toUpperCase();
-                    const subjStatus = parts[1].trim().toUpperCase();
-
-                    // Apply filter
-                    const isScience = scienceSubjectsList.some(sci => subjName.includes(sci));
-                    if (filterVal === 'science' && !isScience) return;
-                    if (filterVal === 'arts' && isScience) return;
-
-                    if (!subjectStats[subjName]) {
-                        subjectStats[subjName] = { pass: 0, fail: 0 };
-                    }
-                    if (subjStatus.includes('PASS')) {
-                        subjectStats[subjName].pass++;
-                    } else {
-                        subjectStats[subjName].fail++;
-                    }
-                }
-            });
-        }
-    });
-
-    const labels = Object.keys(subjectStats);
-    const passData = labels.map(l => subjectStats[l].pass);
-    const failData = labels.map(l => subjectStats[l].fail);
+    // Create scatter data points
+    const scatterData = studentData.map(s => ({
+        x: s.rollNumber,
+        y: s.numericMarks,
+        name: s.name,
+        rawMarks: s.rawMarks
+    }));
 
     studentPerformanceChart = new Chart(ctx, {
-        type: 'bar',
+        type: 'scatter',
         data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'Pass',
-                    data: passData,
-                    backgroundColor: 'rgba(16, 185, 129, 0.8)',
-                    borderColor: 'rgba(16, 185, 129, 1)',
-                    borderWidth: 1
-                },
-                {
-                    label: 'Fail',
-                    data: failData,
-                    backgroundColor: 'rgba(239, 68, 68, 0.8)',
-                    borderColor: 'rgba(239, 68, 68, 1)',
-                    borderWidth: 1
-                }
-            ]
+            datasets: [{
+                label: 'Student Marks',
+                data: scatterData,
+                backgroundColor: 'rgba(99, 102, 241, 0.8)', // Indigo
+                borderColor: 'rgba(79, 70, 229, 1)',
+                pointRadius: 6,
+                pointHoverRadius: 8,
+                borderWidth: 2
+            }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: {
-                x: {
-                    stacked: false,
-                    ticks: { color: '#f8fafc' },
-                    grid: { color: 'rgba(255, 255, 255, 0.1)' }
-                },
-                y: {
-                    stacked: false,
-                    beginAtZero: true,
-                    ticks: { color: '#f8fafc', stepSize: 1 },
-                    grid: { color: 'rgba(255, 255, 255, 0.1)' }
-                }
-            },
             plugins: {
-                legend: { labels: { color: '#f8fafc' } },
+                legend: {
+                    display: false
+                },
                 tooltip: {
                     backgroundColor: 'rgba(0, 0, 0, 0.9)',
                     titleColor: '#f8fafc',
                     bodyColor: '#f8fafc',
                     borderColor: '#4f46e5',
-                    borderWidth: 1
+                    borderWidth: 2,
+                    padding: 12,
+                    displayColors: false,
+                    callbacks: {
+                        label: function(context) {
+                            const point = context.raw;
+                            return [
+                                'Name: ' + point.name,
+                                'Roll No: ' + point.x,
+                                'Status/Marks: ' + point.rawMarks
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Roll Number',
+                        color: '#f8fafc'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                    },
+                    ticks: {
+                        color: '#94a3b8',
+                        font: { family: "'Poppins', sans-serif" }
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Total Marks',
+                        color: '#f8fafc'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    },
+                    ticks: {
+                        color: '#94a3b8',
+                        font: { family: "'Poppins', sans-serif" }
+                    }
                 }
             }
         }

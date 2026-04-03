@@ -60,9 +60,16 @@
                 <canvas id="barChart"></canvas>
             </div>
 
-            <!-- Students Performance Bar (Descending) -->
+            <!-- Subject Performance Bar -->
             <div class="chart-card chart-card-full">
-                <h3>Student Marks Distribution</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3>Subject Wise Performance</h3>
+                    <select id="subjectGroupFilter" style="padding: 5px 10px; background: #1e293b; color: white; border: 1px solid #4f46e5; border-radius: 5px;">
+                        <option value="all">All Subjects</option>
+                        <option value="science">Science Subjects</option>
+                        <option value="arts">Arts Subjects</option>
+                    </select>
+                </div>
                 <div style="height: 400px; position: relative;">
                     <canvas id="studentPerformanceChart"></canvas>
                 </div>
