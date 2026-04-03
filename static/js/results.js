@@ -140,7 +140,7 @@ function setupSearch() {
 /* ==================== SORT ==================== */
 
 function sortTable(columnIndex) {
-    const headers = ['Roll_Number', 'Name', 'Father_Name', 'Total_Marks'];
+    const headers = ['Roll_Number', 'Name', 'Father_Name', 'Total_Marks', 'Status', 'Subject_Pass'];
     const columnName = headers[columnIndex];
 
     if (currentSort.column === columnIndex) {
@@ -275,7 +275,7 @@ function renderTable() {
     if (!tableBody) return;
 
     if (filteredData.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="4" class="no-data">No results found. Try a different search or upload a CSV file.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="6" class="no-data">No results found. Try a different search or upload a CSV file.</td></tr>';
         renderPagination();
         return;
     }
@@ -289,7 +289,9 @@ function renderTable() {
             <td>${row.Roll_Number || '-'}</td>
             <td>${row.Name || '-'}</td>
             <td>${row.Father_Name || '-'}</td>
-            <td>${row.Total_Marks || '-'}</td>
+            <td><strong>${row.Total_Marks || '-'}</strong></td>
+            <td><div class="status-badge ${row.Status === 'PASS' ? 'success' : 'danger'}">${row.Status || '-'}</div></td>
+            <td>${row.Subject_Pass || '-'}</td>
         </tr>
     `).join('');
 
@@ -308,7 +310,7 @@ function setupExport() {
             return;
         }
 
-        const headers = ['Roll_Number', 'Name', 'Father_Name', 'Total_Marks'];
+        const headers = ['Roll_Number', 'Name', 'Father_Name', 'Total_Marks', 'Status', 'Subject_Pass'];
         let csv = headers.join(',') + '\n';
 
         filteredData.forEach(row => {

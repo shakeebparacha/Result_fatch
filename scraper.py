@@ -148,42 +148,63 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
                     father_name = "N/A"
                     
                 # Extract Total Marks securely from the final row of the Marks Grid
-                total_marks = "N/A"
+                total_marks = "0"
+                status = "FAIL"
+                subject_pass = "FAIL/SUPPLY"
                 try:
                     # Finds the table, gets all rows, selects last row, selects last column
-                    marks_table = driver.find_element(By.ID, "GridStudentData")
-                    last_row = marks_table.find_elements(By.TAG_NAME, "tr")[-1]
-                    last_cell = last_row.find_elements(By.TAG_NAME, "td")[-1]
-                    total_marks = last_cell.text.strip() # This extracts exactly "PASS 449"
+                    marks_table = driver.find_element(By.ID, "GridStudentData") 
+                    last_row = marks_table.find_elements(By.TAG_NAME, "tr")[-1] 
+                    last_cell = last_row.find_elements(By.TAG_NAME, "td")[-1]   
+                    raw_text = last_cell.text.strip().upper()
+                    
+                    import re
+                    if raw_text.isdigit():
+                        status = "PASS"
+                        subject_pass = "All Pass"
+                        total_marks = raw_text
+                    elif "PASS" in raw_text:
+                        numbers = re.findall(r'\d+', raw_text)
+                        status = "PASS"
+                        subject_pass = "All Pass"
+                        total_marks = numbers[0] if numbers else "0"
+                    else:
+                        status = "FAIL"
+                        subject_pass = raw_text # Store the subject list as status or absent
+                        total_marks = "0"
                 except Exception as e:
                     pass
-                
+
                 print(f"\n" + "="*50)
                 print(f"🎓 RESULT SUCCESSFULLY EXTRACTED FOR ROLL NO {roll_no}")
                 print(f"  NAME:           {name}")
                 print(f"  FATHER'S NAME:  {father_name}")
+                print(f"  STATUS:         {status}")
+                print(f"  SUBJECT PASS:   {subject_pass}")
                 print(f"  TOTAL MARKS:    {total_marks}")
                 print("="*50)
-                
+
                 # Save exactly what you asked for to an Excel-friendly CSV file!
                 import csv
                 import os
-                
+
                 csv_filename = "Student_Results.csv"
                 file_exists = os.path.isfile(csv_filename)
-                
+
                 with open(csv_filename, 'a', newline='', encoding='utf-8') as csvfile:
-                    fieldnames = ['Roll_Number', 'Name', 'Father_Name', 'Total_Marks']
-                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                    
+                    fieldnames = ['Roll_Number', 'Name', 'Father_Name', 'Total_Marks', 'Status', 'Subject_Pass']
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames) 
+
                     if not file_exists:
                         writer.writeheader() # Write the columns at the top if file is new
-                        
+
                     writer.writerow({
                         'Roll_Number': roll_no,
                         'Name': name,
                         'Father_Name': father_name,
-                        'Total_Marks': total_marks
+                        'Total_Marks': total_marks,
+                        'Status': status,
+                        'Subject_Pass': subject_pass
                     })
                 
                 print(f"Data saved directly to {csv_filename} instead of downloading HTML!")

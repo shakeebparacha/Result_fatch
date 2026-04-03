@@ -16,7 +16,7 @@ def initialize_csv():
     """Clear CSV file on app startup with headers only"""
     try:
         with open(CSV_FILE, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=['Roll_Number', 'Name', 'Father_Name', 'Total_Marks', 'Status'])
+            writer = csv.DictWriter(f, fieldnames=['Roll_Number', 'Name', 'Father_Name', 'Total_Marks', 'Status', 'Subject_Pass'])
             writer.writeheader()
         print(f"✓ CSV initialized (cleared on startup): {CSV_FILE}")
     except Exception as e:
@@ -109,13 +109,15 @@ def download_sample():
     """Download sample CSV template"""
     try:
         output = io.StringIO()
-        writer = csv.DictWriter(output, fieldnames=['Roll_Number', 'Name', 'Father_Name', 'Total_Marks'])
+        writer = csv.DictWriter(output, fieldnames=['Roll_Number', 'Name', 'Father_Name', 'Total_Marks', 'Status', 'Subject_Pass'])
         writer.writeheader()
         writer.writerow({
             'Roll_Number': '123456',
             'Name': 'STUDENT NAME',
             'Father_Name': 'FATHER NAME',
-            'Total_Marks': 'PASS XXX or SUBJECT LIST'
+            'Total_Marks': '449',
+            'Status': 'PASS',
+            'Subject_Pass': 'All Pass'
         })
         
         output.seek(0)
@@ -141,15 +143,17 @@ def get_graph_data():
         # Process data for graphs
         pass_count = 0
         fail_count = 0
-        
+
         for row in results_list:
-            if 'Total_Marks' in row:
-                marks_str = row['Total_Marks'].lower()
-                if 'pass' in marks_str:
-                    pass_count += 1
-                else:
-                    fail_count += 1
-        
+            status_str = row.get('Status', '').lower()
+            if not status_str and 'Total_Marks' in row:
+                status_str = row['Total_Marks'].lower()
+                
+            if 'pass' in status_str:
+                pass_count += 1
+            elif status_str: # only count fail if status isn't totally empty
+                fail_count += 1
+
         return jsonify({
             "status": "success",
             "total_students": len(results_list),
