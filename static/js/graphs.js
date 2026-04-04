@@ -3,6 +3,7 @@
 let pieChart = null;
 let barChart = null;
 let studentPerformanceChart = null;
+let subjectPassRatioChart = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     loadGraphData();
@@ -12,7 +13,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function loadGraphData() {
-    fetch('/api/results')
+    fetch('/api/results?_t=' + new Date().getTime())
         .then(response => response.json())
         .then(data => {
             const results = data.data || [];
@@ -29,10 +30,10 @@ function loadGraphData() {
             let failCount = 0;
 
             results.forEach(row => {
-                const status = String(row.Status || '').toUpperCase();
-                if (status === 'PASS') {
+                const status = String(row.Status || '').trim().toUpperCase();
+                if (status === 'PASS' || status.includes('PASS')) {
                     passCount++;
-                } else if (status === 'FAIL') {
+                } else if (status === 'FAIL' || status.includes('FAIL') || status.length > 0) {
                     failCount++;
                 }
             });
@@ -49,6 +50,7 @@ function loadGraphData() {
             renderPieChart(passCount, failCount);
             renderBarChart(passCount, failCount, results.length);
             renderStudentPerformanceChart(results);
+            renderSubjectPassRatioChart(results);
         })
         .catch(error => {
             console.error('Error loading graph data:', error);
@@ -317,9 +319,11 @@ function showNoDataMessage() {
     const pieContainer = document.getElementById('pieChart');
     const barContainer = document.getElementById('barChart');
     const perfContainer = document.getElementById('studentPerformanceChart');
+    const ratioContainer = document.getElementById('subjectPassRatioChart');
     if (pieContainer) pieContainer.style.display = 'none';
     if (barContainer) barContainer.style.display = 'none';
     if (perfContainer) perfContainer.style.display = 'none';
+    if (ratioContainer) ratioContainer.style.display = 'none';
 }
 
 function hideNoDataMessage() {
@@ -327,12 +331,123 @@ function hideNoDataMessage() {
     if (message) {
         message.style.display = 'none';
     }
-    
+
     // Show charts
     const pieContainer = document.getElementById('pieChart');
     const barContainer = document.getElementById('barChart');
     const perfContainer = document.getElementById('studentPerformanceChart');
+    const ratioContainer = document.getElementById('subjectPassRatioChart');
     if (pieContainer) pieContainer.style.display = 'block';
     if (barContainer) barContainer.style.display = 'block';
     if (perfContainer) perfContainer.style.display = 'block';
+    if (ratioContainer) ratioContainer.style.display = 'block';
+}
+
+    // Check for subject pass ratio filter
+    const ratioFilterElem = document.getElementById('subjectRatioGroupFilter');
+    if (ratioFilterElem && !ratioFilterElem.hasEventListener) {
+        ratioFilterElem.addEventListener('change', loadGraphData);
+        ratioFilterElem.hasEventListener = true;
+    }
+
+function renderSubjectPassRatioChart(results) {
+    const ctx = document.getElementById('subjectPassRatioChart');
+    if (!ctx) return;
+
+    if (subjectPassRatioChart) {
+        subjectPassRatioChart.destroy();
+    }
+
+    const filterVal = document.getElementById('subjectRatioGroupFilter') ? document.getElementById('subjectRatioGroupFilter').value : 'all';
+    const scienceSubjectsList = ["PHYSICS", "CHEMISTRY", "MATH", "MATHEMATICS", "BIOLOGY", "COMPUTER", "STATISTICS"];
+
+    const subjectStats = {};
+
+    results.forEach(row => {
+        const subjectPassRaw = row.Subject_Pass || "";
+        if (subjectPassRaw && subjectPassRaw !== "All Pass" && subjectPassRaw.includes(":")) {
+            const subjects = subjectPassRaw.split(",");
+            subjects.forEach(s => {
+                const parts = s.split(":");
+                if (parts.length >= 2) {
+                    const subjName = parts[0].trim().toUpperCase();
+                    const subjStatus = parts[1].trim().toUpperCase();
+
+                    const isScience = scienceSubjectsList.some(sci => subjName.includes(sci));
+                    if (filterVal === 'science' && !isScience) return;
+                    if (filterVal === 'arts' && isScience) return;
+
+                    if (!subjectStats[subjName]) {
+                        subjectStats[subjName] = { pass: 0, fail: 0 };
+                    }
+                    if (subjStatus.includes('PASS')) {
+                        subjectStats[subjName].pass++;
+                    } else {
+                        subjectStats[subjName].fail++;
+                    }
+                }
+            });
+        }
+    });
+
+    let labels = Object.keys(subjectStats);
+    
+    // Sort labels by pass ratio descending
+    labels.sort((a, b) => {
+        const totalA = subjectStats[a].pass + subjectStats[a].fail;
+        const totalB = subjectStats[b].pass + subjectStats[b].fail;
+        const ratioA = totalA > 0 ? (subjectStats[a].pass / totalA) * 100 : 0;
+        const ratioB = totalB > 0 ? (subjectStats[b].pass / totalB) * 100 : 0;
+        return ratioB - ratioA;
+    });
+
+    const ratioData = labels.map(l => {
+        const total = subjectStats[l].pass + subjectStats[l].fail;
+        return total > 0 ? ((subjectStats[l].pass / total) * 100).toFixed(1) : 0;
+    });
+
+    subjectPassRatioChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Pass Ratio (%)',
+                data: ratioData,
+                backgroundColor: 'rgba(56, 189, 248, 0.8)', // vibrant sky blue
+                borderColor: 'rgba(56, 189, 248, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    ticks: { color: '#f8fafc' },
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                },
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: { color: '#f8fafc', stepSize: 20 },
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                }
+            },
+            plugins: {
+                legend: { labels: { color: '#f8fafc' } },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                    titleColor: '#f8fafc',
+                    bodyColor: '#f8fafc',
+                    borderColor: '#0ea5e9',
+                    borderWidth: 1,
+                    callbacks: {
+                        label: function(context) {
+                            return context.raw + '% Passed';
+                        }
+                    }
+                }
+            }
+        }
+    });
 }

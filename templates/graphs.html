@@ -74,6 +74,21 @@
                     <canvas id="studentPerformanceChart"></canvas>
                 </div>
             </div>
+
+            <!-- Subject Pass Ratio Bar -->
+            <div class="chart-card chart-card-full">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3>Subject Pass Ratio (%)</h3>
+                    <select id="subjectRatioGroupFilter" style="padding: 5px 10px; background: #1e293b; color: white; border: 1px solid #4f46e5; border-radius: 5px;">
+                        <option value="all">All Subjects</option>
+                        <option value="science">Science Subjects</option>
+                        <option value="arts">Arts Subjects</option>
+                    </select>
+                </div>
+                <div style="height: 400px; position: relative;">
+                    <canvas id="subjectPassRatioChart"></canvas>
+                </div>
+            </div>
         </div>
 
         <!-- No Data Message -->

@@ -68,7 +68,12 @@ def get_results():
             with open(CSV_FILE, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 results_list = list(reader)
-        return jsonify({"status": "success", "data": results_list})
+        
+        response = jsonify({"status": "success", "data": results_list})
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 

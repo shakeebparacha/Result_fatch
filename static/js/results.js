@@ -103,7 +103,7 @@ function loadResults() {
     const loadingSpinner = document.getElementById('loadingSpinner');
     if (loadingSpinner) loadingSpinner.style.display = 'flex';
 
-    fetch('/api/results')
+    fetch('/api/results?_t=' + new Date().getTime())
         .then(response => response.json())
         .then(data => {
             allData = data.data || [];
