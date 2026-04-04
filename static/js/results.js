@@ -18,6 +18,30 @@ function initializeResultsPage() {
     loadResults();
 }
 
+// Clear Data functionality
+window.clearData = function() {
+    if (confirm("Are you sure you want to clear all data? This cannot be undone.")) {
+        fetch('/api/clear-data', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                allData = [];
+                filteredData = [];
+                renderTable();
+                alert(data.message);
+            } else {
+                alert('Error clearing data: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error clearing data:', error);
+            alert('An error occurred while clearing data.');
+        });
+    }
+};
+
 /* ==================== FILE UPLOAD ==================== */
 
 function setupFileUpload() {

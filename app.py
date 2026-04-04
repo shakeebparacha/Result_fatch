@@ -127,6 +127,23 @@ def upload_csv():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route('/api/clear-data', methods=['POST'])
+def clear_data():
+    """Clear all data from the CSV file keep headers"""
+    try:
+        if os.path.exists(CSV_FILE):
+            with open(CSV_FILE, 'r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                headers = next(reader, ['Roll_Number', 'Name', 'Father_Name', 'Total_Marks', 'Status', 'Subject_Pass'])
+            
+            with open(CSV_FILE, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                
+        return jsonify({"status": "success", "message": "Data cleared successfully"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route('/api/download-sample', methods=['GET'])
 def download_sample():
     """Download sample CSV template"""

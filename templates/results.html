@@ -33,6 +33,9 @@
                     <a href="/api/download-sample" class="btn btn-outline btn-small" download>
                         📥 Download Sample
                     </a>
+                    <a href="/graphs" class="btn btn-outline btn-small">
+                        📈 View Chart
+                    </a>
                 </div>
             </div>
         </div>
@@ -50,6 +53,10 @@
                     <option value="50">50 rows</option>
                     <option value="100">100 rows</option>
                 </select>
+
+                <button id="clearDataBtn" class="btn btn-danger btn-small" onclick="clearData()">
+                    🗑️ Clear Data
+                </button>
 
                 <button id="exportBtn" class="btn btn-outline btn-small">
                     📊 Export CSV
