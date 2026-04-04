@@ -5,6 +5,8 @@ webdriver-manager
 requests
 gunicorn
 Pillow
-ddddocrpandas
+pandas
 openpyxl
 ddddocr
+
+
