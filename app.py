@@ -265,5 +265,4 @@ def internal_error(e):
 if __name__ == '__main__':
     print("🚀 Student Results Platform running at http://127.0.0.1:5000")
     print("Press Ctrl+C to stop.")
-    app.run(port=5000, debug=True)
-
+    app.run(port=5000, debug=True, use_reloader=False)
