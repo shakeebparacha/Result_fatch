@@ -4,8 +4,26 @@ document.addEventListener('DOMContentLoaded', function() {
     const scraperForm = document.getElementById('scraperForm');
     if (scraperForm) {
         scraperForm.addEventListener('submit', handleScraperSubmit);
+        // Check if scraping is already running
+        checkInitialStatus();
     }
 });
+
+function checkInitialStatus() {
+    fetch('/api/scrape-status')
+        .then(res => res.json())
+        .then(status => {
+            if (status.is_running) {
+                const terminal = document.getElementById('terminal');
+                const terminalContent = document.getElementById('terminalContent');
+                terminal.classList.add('active');
+                terminalContent.innerHTML = '<div class="terminal-line terminal-info">> Resuming active session monitoring...</div>';
+                logToTerminal(`> Scraping task is already in progress.`, 'terminal-success');
+                startPollingStatus();
+            }
+        })
+        .catch(err => console.log('Error checking status:', err));
+}
 
 function handleScraperSubmit(e) {
     e.preventDefault();
