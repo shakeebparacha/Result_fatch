@@ -8,39 +8,56 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
 
+shared_driver = None
+shared_ocr = None
+
+def close_browser():
+    global shared_driver
+    if shared_driver:
+        try:
+            shared_driver.quit()
+        except:
+            pass
+        shared_driver = None
+
 def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='2024'):
+    global shared_driver, shared_ocr
     print("\n" + "="*50)
     print("🚀 Starting Visual Browser Automation...")
     print("="*50)
     
-    print("Loading ddddocr AI model...")
-    ocr = ddddocr.DdddOcr(show_ad=False)
+    if shared_ocr is None:
+        print("Loading ddddocr AI model...")
+        shared_ocr = ddddocr.DdddOcr(show_ad=False)
+    ocr = shared_ocr
 
-    try:
-        # Try Edge first since it's built into Windows
-        options = webdriver.EdgeOptions()
-        # options.add_argument('--headless') # Uncomment this before deploying to Render!
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_experimental_option("excludeSwitches", ["enable-logging"])  
-        driver = webdriver.Edge(options=options)
-    except:
+    if shared_driver is None:
+        print("Starting Background Application Browser...")
         try:
-            # Fallback to Chrome
-            options = webdriver.ChromeOptions()
-            # options.add_argument('--headless') # Uncomment this before deploying to Render!
+            # Try to run Edge headless
+            options = webdriver.EdgeOptions()
+            options.add_argument('--headless=new')
             options.add_argument('--no-sandbox')
             options.add_argument('--disable-dev-shm-usage')
-            options.add_argument('--disable-gpu') # necessary for headless servers
-            options.add_argument('--window-size=1920,1080')
-            options.add_experimental_option("excludeSwitches", ["enable-logging"])
-            
-            # Use Selenium Manager (Selenium 4.10+) which will try to find Chrome in PATH 
-            driver = webdriver.Chrome(options=options)
-        except Exception as e:
-            print("[!] Could not start Edge or Chrome. Make sure you have one installed.")
-            print("Error details:", str(e))
-            return False
+            options.add_experimental_option("excludeSwitches", ["enable-logging"])  
+            shared_driver = webdriver.Edge(options=options)
+        except:
+            try:
+                # Try to run Chrome headless
+                options = webdriver.ChromeOptions()
+                options.add_argument('--headless=new')
+                options.add_argument('--no-sandbox')
+                options.add_argument('--disable-dev-shm-usage')
+                options.add_argument('--disable-gpu') 
+                options.add_argument('--window-size=1920,1080')
+                options.add_experimental_option("excludeSwitches", ["enable-logging"])
+                shared_driver = webdriver.Chrome(options=options)
+            except Exception as e:
+                print("[!] Could not start Edge or Chrome. Make sure you have one installed.")
+                print("Error details:", str(e))
+                return False
+
+    driver = shared_driver
 
     wait = WebDriverWait(driver, 10)
     
@@ -82,7 +99,7 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
             except Exception as e:
                 print("\n[WARNING] Failed to solve captcha using ddddocr.")
                 print(e)
-                driver.quit()
+                # driver.quit()
                 return False
 
             # 3. Fill out the form automatically in the browser
@@ -128,7 +145,7 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
                     print("Website returned an error:", error_text)
                     if "Roll No" in error_text:
                         print("Stopping: Invalid Roll Number.")
-                        driver.quit()
+                        # driver.quit()
                         return False
                     else:
                         print("The ddddocr AI incorrectly guessed the Captcha. Refreshing and retrying...")
@@ -244,11 +261,11 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
                 
                 print("\nStudent scraped successfully! Closing browser and moving to next...")
                 time.sleep(3)
-                driver.quit()
+                # driver.quit()
                 return True
             except Exception as e:
                 print("Could not find result data on the page. Something unexpected happened.")
-                driver.quit()
+                # driver.quit()
                 return False
                 
         except Exception as e:
@@ -256,7 +273,7 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
             print("Retrying...")
 
     print("\n[!] Exhausted all attempts. The ddddocr AI couldn't guess the Captcha correctly.")
-    driver.quit()
+    # driver.quit()
     return False
 
 
@@ -331,3 +348,4 @@ if __name__ == "__main__":
     print(f"Successfully processed {success_count} out of {len(roll_numbers_to_check)} roll numbers.")
     print("="*50)
     print("Check Student_Results.csv for the data!")
+    close_browser()

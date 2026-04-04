@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, render_template, send_file
-from scraper import scrape_bise_lahore_selenium
+from scraper import scrape_bise_lahore_selenium, close_browser
 import threading
 import csv
 import os
@@ -219,6 +219,7 @@ def background_scraper(roll_numbers, course, exam_year, exam_type_val):
 
     scraping_status["message"] = f"Finished! Successfully scraped {scraping_status['success']} out of {total} roll numbers."
     scraping_status["is_running"] = False
+    close_browser()
     print("\n[!] Background worker finished completely.")
 
 @app.route('/api/scrape', methods=['POST'])
