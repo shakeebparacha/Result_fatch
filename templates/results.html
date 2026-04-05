@@ -46,6 +46,16 @@
                 <input type="text" id="searchInput" placeholder="🔍 Search by Roll Number or Name..." class="search-input">
             </div>
 
+            <!-- Subject Filter (Checkboxes) -->
+            <div class="subject-filter-container" style="position: relative; display: inline-block;">
+                <button type="button" class="btn btn-outline btn-small" id="subjectFilterBtn">
+                    🎯 Filter Subjects
+                </button>
+                <div id="subjectFilterDropdown" class="subject-filter-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: white; color: #333; border: 1px solid #ccc; padding: 10px; z-index: 1000; min-width: 150px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 4px; max-height: 200px; overflow-y: auto;">
+                    <!-- Checkboxes will be rendered here dynamically -->
+                </div>
+            </div>
+
             <div class="controls-right">
                 <select id="rowsPerPage" class="select-control">
                     <option value="10">10 rows</option>
@@ -74,6 +84,7 @@
             <table class="results-table" id="resultsTable">
                 <thead>
                     <tr>
+                        <th>S.No.</th>
                         <th onclick="sortTable(0)">Roll Number <span class="sort-icon">⬍</span></th>
                         <th onclick="sortTable(1)">Name <span class="sort-icon">⬍</span></th>
                         <th onclick="sortTable(2)">Father Name <span class="sort-icon">⬍</span></th>
@@ -83,7 +94,7 @@
                     </tr>
                 </thead>
                 <tbody id="tableBody">
-                    <tr><td colspan="6" class="no-data">No data available. Upload a CSV file to get started.</td></tr>
+                    <tr><td colspan="7" class="no-data">No data available. Upload a CSV file to get started.</td></tr>
                 </tbody>
             </table>
         </div>

@@ -133,6 +133,7 @@ function loadResults() {
             allData = data.data || [];
             filteredData = [...allData];
             currentPage = 1;
+            extractFailedSubjects();
             renderTable();
             if (loadingSpinner) loadingSpinner.style.display = 'none';
         })
@@ -142,23 +143,107 @@ function loadResults() {
         });
 }
 
-/* ==================== SEARCH ==================== */
+/* ==================== SEARCH & FILTER ==================== */
+
+let selectedSubjects = [];
+
+function extractFailedSubjects() {
+    const defaultPassValues = ['all pass', '-', '', 'pass', 'absent'];
+    const subjectsSet = new Set();
+    
+    allData.forEach(row => {
+        let subjectsRaw = (row.Subject_Pass || '').toLowerCase().trim();
+        if (!defaultPassValues.includes(subjectsRaw)) {
+            // Check if there are multiple subjects separated by commas (or other delimiters if necessary)
+            let subs = subjectsRaw.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
+            subs.forEach(s => subjectsSet.add(s));
+        }
+    });
+
+    const subjectsArray = Array.from(subjectsSet).sort();
+    renderSubjectFilter(subjectsArray);
+}
+
+function renderSubjectFilter(subjects) {
+    const dropdown = document.getElementById('subjectFilterDropdown');
+    const filterBtn = document.getElementById('subjectFilterBtn');
+    if (!dropdown || !filterBtn) return;
+
+    // Toggle dropdown
+    filterBtn.onclick = function() {
+        dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+    };
+
+    dropdown.innerHTML = '';
+    
+    if (subjects.length === 0) {
+        dropdown.innerHTML = '<div style="padding: 5px; color: #888; font-size: 13px;">No failed subjects found</div>';
+        return;
+    }
+
+    subjects.forEach(subject => {
+        const label = document.createElement('label');
+        label.style.display = 'block';
+        label.style.padding = '5px';
+        label.style.cursor = 'pointer';
+        label.style.whiteSpace = 'nowrap';
+        label.style.color = '#333';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = subject;
+        checkbox.style.marginRight = '8px';
+        
+        checkbox.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                selectedSubjects.push(subject);
+            } else {
+                selectedSubjects = selectedSubjects.filter(s => s !== subject);
+            }
+            applyFilters();
+        });
+
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(subject));
+        dropdown.appendChild(label);
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(event) {
+        if (!filterBtn.contains(event.target) && !dropdown.contains(event.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+function applyFilters() {
+    const searchInput = document.getElementById('searchInput');
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+    
+    filteredData = allData.filter(row => {
+        const rollNum = (row.Roll_Number || '').toLowerCase();
+        const name = (row.Name || '').toLowerCase();
+        const matchesSearch = rollNum.includes(searchTerm) || name.includes(searchTerm);
+        
+        let matchesSubject = true;
+        if (selectedSubjects.length > 0) {
+            const rowSubjects = (row.Subject_Pass || '').toUpperCase();
+            matchesSubject = selectedSubjects.some(sub => rowSubjects.includes(sub));
+        }
+
+        return matchesSearch && matchesSubject;
+    });
+
+    currentPage = 1;
+    renderTable();
+}
 
 function setupSearch() {
     const searchInput = document.getElementById('searchInput');
     if (!searchInput) return;
 
-    searchInput.addEventListener('input', (e) => {
-        const searchTerm = e.target.value.toLowerCase();
-        
-        filteredData = allData.filter(row => {
-            const rollNum = (row.Roll_Number || '').toLowerCase();
-            const name = (row.Name || '').toLowerCase();
-            return rollNum.includes(searchTerm) || name.includes(searchTerm);
-        });
-
-        currentPage = 1;
-        renderTable();
+    searchInput.addEventListener('input', () => {
+        applyFilters();
     });
 }
 
@@ -300,7 +385,7 @@ function renderTable() {
     if (!tableBody) return;
 
     if (filteredData.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="6" class="no-data">No results found. Try a different search or upload a CSV file.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="7" class="no-data">No results found. Try a different search or upload a CSV file.</td></tr>';
         renderPagination();
         return;
     }
@@ -309,7 +394,8 @@ function renderTable() {
     const endIdx = startIdx + rowsPerPage;
     const pageData = filteredData.slice(startIdx, endIdx);
 
-    tableBody.innerHTML = pageData.map(row => {
+    tableBody.innerHTML = pageData.map((row, index) => {
+        const serialNumber = startIdx + index + 1;
         let displaySubjectPass = row.Subject_Pass || '-';
         if (displaySubjectPass && displaySubjectPass !== '-' && displaySubjectPass !== 'All Pass' && displaySubjectPass.includes(':')) {
             const upcased = displaySubjectPass.toUpperCase();
@@ -332,6 +418,7 @@ function renderTable() {
         
         return `
         <tr>
+            <td>${serialNumber}</td>
             <td>${row.Roll_Number || '-'}</td>
             <td>${row.Name || '-'}</td>
             <td>${row.Father_Name || '-'}</td>
@@ -356,12 +443,21 @@ function setupExport() {
             return;
         }
 
-        const headers = ['Roll_Number', 'Name', 'Father_Name', 'Total_Marks', 'Status', 'Subject_Pass'];
+        const headers = ['S.No.', 'Roll_Number', 'Name', 'Father_Name', 'Total_Marks', 'Status', 'Subject_Pass'];
         let csv = headers.join(',') + '\n';
 
-        filteredData.forEach(row => {
-            csv += headers.map(h => {
-                let val = row[h] || '';
+        filteredData.forEach((row, index) => {
+            const rowData = [
+                index + 1,
+                row.Roll_Number || '',
+                row.Name || '',
+                row.Father_Name || '',
+                row.Total_Marks || '',
+                row.Status || '',
+                row.Subject_Pass || ''
+            ];
+            
+            csv += rowData.map(val => {
                 // Escape quotes and wrap in quotes if contains comma
                 if (typeof val === 'string' && val.includes(',')) {
                     val = `"${val.replace(/"/g, '""')}"`;
