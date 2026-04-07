@@ -33,9 +33,10 @@ function loadGraphData() {
                 const status = String(row.Status || '').trim().toUpperCase();
                 if (status === 'PASS' || status.includes('PASS')) {
                     passCount++;
-                } else if (status === 'FAIL' || status.includes('FAIL') || status.length > 0) {
+                } else if (status === 'FAIL' || status.includes('FAIL')) {
                     failCount++;
                 }
+                // absentCount is inferred as (total - passCount - failCount) later
             });
 
             // Update stats
@@ -224,7 +225,7 @@ function renderStudentPerformanceChart(results) {
                 const parts = s.split(":");
                 if (parts.length >= 2) {
                     const subjName = parts[0].trim().toUpperCase();
-                    const subjStatus = parts[1].trim().toUpperCase();
+                    const subjStatus = parts[parts.length - 1].trim().toUpperCase();
 
                     // Apply filter
                     const isScience = scienceSubjectsList.some(sci => subjName.includes(sci));
@@ -371,7 +372,7 @@ function renderSubjectPassRatioChart(results) {
                 const parts = s.split(":");
                 if (parts.length >= 2) {
                     const subjName = parts[0].trim().toUpperCase();
-                    const subjStatus = parts[1].trim().toUpperCase();
+                    const subjStatus = parts[parts.length - 1].trim().toUpperCase();
 
                     const isScience = scienceSubjectsList.some(sci => subjName.includes(sci));
                     if (filterVal === 'science' && !isScience) return;

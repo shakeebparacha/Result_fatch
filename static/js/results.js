@@ -5,6 +5,8 @@ let filteredData = [];
 let currentSort = { column: 0, ascending: true };
 let currentPage = 1;
 let rowsPerPage = 10;
+let allDynamicSubjects = [];
+let visibleDynamicSubjects = [];
 
 document.addEventListener('DOMContentLoaded', function() {
     initializeResultsPage();
@@ -134,6 +136,8 @@ function loadResults() {
             filteredData = [...allData];
             currentPage = 1;
             extractFailedSubjects();
+            extractDynamicSubjects();
+            renderTableHeader();
             renderTable();
             if (loadingSpinner) loadingSpinner.style.display = 'none';
         })
@@ -148,19 +152,7 @@ function loadResults() {
 let selectedSubjects = [];
 
 function extractFailedSubjects() {
-    const defaultPassValues = ['all pass', '-', '', 'pass', 'absent'];
-    const subjectsSet = new Set();
-    
-    allData.forEach(row => {
-        let subjectsRaw = (row.Subject_Pass || '').toLowerCase().trim();
-        if (!defaultPassValues.includes(subjectsRaw)) {
-            // Check if there are multiple subjects separated by commas (or other delimiters if necessary)
-            let subs = subjectsRaw.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
-            subs.forEach(s => subjectsSet.add(s));
-        }
-    });
-
-    const subjectsArray = Array.from(subjectsSet).sort();
+    const subjectsArray = ['PASS', 'FAIL'];
     renderSubjectFilter(subjectsArray);
 }
 
@@ -227,8 +219,8 @@ function applyFilters() {
         
         let matchesSubject = true;
         if (selectedSubjects.length > 0) {
-            const rowSubjects = (row.Subject_Pass || '').toUpperCase();
-            matchesSubject = selectedSubjects.some(sub => rowSubjects.includes(sub));
+            const status = (row.Status || '').toUpperCase();
+            matchesSubject = selectedSubjects.includes(status);
         }
 
         return matchesSearch && matchesSubject;
@@ -247,7 +239,146 @@ function setupSearch() {
     });
 }
 
+function extractDynamicSubjects() {
+    const subjectsSet = new Set();
+    allData.forEach(row => {
+        let subjectsRaw = (row.Subject_Pass || '').trim();
+        if (subjectsRaw && subjectsRaw !== '-' && subjectsRaw.toLowerCase() !== 'all pass' && subjectsRaw.includes(':')) {
+            const subjects = subjectsRaw.split(',');
+            subjects.forEach(s => {
+                const parts = s.split(':');
+                if (parts.length > 0) {
+                    const subjName = parts[0].trim();
+                    if (subjName) {
+                        subjectsSet.add(subjName);
+                    }
+                }
+            });
+        }
+    });
+    allDynamicSubjects = Array.from(subjectsSet).sort();
+    // Default the new filter to off (hide all dynamic columns initially)
+    visibleDynamicSubjects = [];
+    renderColumnVisibilityFilter();
+}
+
+function renderColumnVisibilityFilter() {
+    const dropdown = document.getElementById('columnVisibilityDropdown');
+    const toggleBtn = document.getElementById('columnVisibilityBtn');
+    if (!dropdown || !toggleBtn) return;
+
+    toggleBtn.onclick = function() {
+        dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+        document.getElementById('subjectFilterDropdown').style.display = 'none'; // Close other dropdown
+    };
+
+    dropdown.innerHTML = '';
+    
+    if (allDynamicSubjects.length === 0) {
+        dropdown.innerHTML = '<div style="padding: 5px; color: #888; font-size: 13px;">No subjects available</div>';
+        return;
+    }
+
+    allDynamicSubjects.forEach(subject => {
+        const label = document.createElement('label');
+        label.style.display = 'block';
+        label.style.padding = '5px';
+        label.style.cursor = 'pointer';
+        label.style.whiteSpace = 'nowrap';
+        label.style.color = '#333';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = subject;
+        checkbox.style.marginRight = '8px';
+        checkbox.checked = visibleDynamicSubjects.includes(subject);
+        
+        checkbox.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                if (!visibleDynamicSubjects.includes(subject)) {
+                    visibleDynamicSubjects.push(subject);
+                }
+            } else {
+                visibleDynamicSubjects = visibleDynamicSubjects.filter(s => s !== subject);
+            }
+            renderTableHeader();
+            renderTable();
+        });
+
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(subject));
+        dropdown.appendChild(label);
+    });
+    
+    // Close dropdown when clicking outside is already handled via document click? Wait, need to add document click handler for this one too.
+    document.addEventListener('click', function(event) {
+        if (!toggleBtn.contains(event.target) && !dropdown.contains(event.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
 /* ==================== SORT ==================== */
+
+let dynamicSortStartIdx = 6; // Because we have 6 fixed columns (S.No., Roll Number, Name, Father Name, Marks, Status, Subject Pass)
+
+function renderTableHeader() {
+    const tableHeader = document.getElementById('tableHeader');
+    if (!tableHeader) return;
+
+    let html = `
+        <tr>
+            <th>S.No.</th>
+            <th onclick="sortTable(0)">Roll Number <span class="sort-icon">⬍</span></th>
+            <th onclick="sortTable(1)">Name <span class="sort-icon">⬍</span></th>
+            <th onclick="sortTable(2)">Father Name <span class="sort-icon">⬍</span></th>
+            <th onclick="sortTable(3)">Marks <span class="sort-icon">⬍</span></th>
+            <th onclick="sortTable(4)">Status <span class="sort-icon">⬍</span></th>
+            <th onclick="sortTable(5)">Subject Pass <span class="sort-icon">⬍</span></th>`;
+            
+    // Add dynamic subject headers
+    visibleDynamicSubjects.forEach((subject, idx) => {
+        html += `<th onclick="sortDynamicTable('${subject}', ${dynamicSortStartIdx + idx})">${subject} <span class="sort-icon">⬍</span></th>`;
+    });
+
+    html += `</tr>`;
+    tableHeader.innerHTML = html;
+}
+
+function getSubjectMark(row, subjectName) {
+    const displaySubjectPass = row.Subject_Pass || '-';
+    if (displaySubjectPass && displaySubjectPass !== '-' && displaySubjectPass !== 'All Pass' && displaySubjectPass.includes(':')) {
+        const subjects = displaySubjectPass.split(',');
+        for (let s of subjects) {
+            const parts = s.split(':');
+            if (parts.length >= 2 && parts[0].trim() === subjectName) {
+                return parseFloat(parts[1].trim()) || 0;
+            }
+        }
+    }
+    return 0; // Default if not found
+}
+
+function sortDynamicTable(subjectName, columnIndex) {
+    if (currentSort.column === columnIndex) {
+        currentSort.ascending = !currentSort.ascending;
+    } else {
+        currentSort.column = columnIndex;
+        currentSort.ascending = true;
+    }
+
+    filteredData.sort((a, b) => {
+        let aVal = getSubjectMark(a, subjectName);
+        let bVal = getSubjectMark(b, subjectName);
+
+        if (aVal < bVal) return currentSort.ascending ? -1 : 1;
+        if (aVal > bVal) return currentSort.ascending ? 1 : -1;
+        return 0;
+    });
+
+    currentPage = 1;
+    renderTable();
+}
 
 function sortTable(columnIndex) {
     const headers = ['Roll_Number', 'Name', 'Father_Name', 'Total_Marks', 'Status', 'Subject_Pass'];
@@ -385,7 +516,8 @@ function renderTable() {
     if (!tableBody) return;
 
     if (filteredData.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="7" class="no-data">No results found. Try a different search or upload a CSV file.</td></tr>';
+        const dropColSpan = 7 + visibleDynamicSubjects.length;
+        tableBody.innerHTML = `<tr><td colspan="${dropColSpan}" class="no-data">No results found. Try a different search or upload a CSV file.</td></tr>`;
         renderPagination();
         return;
     }
@@ -398,25 +530,30 @@ function renderTable() {
         const serialNumber = startIdx + index + 1;
         let displaySubjectPass = row.Subject_Pass || '-';
         if (displaySubjectPass && displaySubjectPass !== '-' && displaySubjectPass !== 'All Pass' && displaySubjectPass.includes(':')) {
-            const upcased = displaySubjectPass.toUpperCase();
-            if (!upcased.includes('FAIL')) {
-                displaySubjectPass = 'Pass all Subject';
-            } else {
-                const failedSubjects = [];
-                const subjects = displaySubjectPass.split(',');
-                subjects.forEach(s => {
-                    const parts = s.split(':');
-                    if (parts.length >= 2 && parts[1].trim().toUpperCase().includes('FAIL')) {
+            const failedSubjects = [];
+            const subjects = displaySubjectPass.split(',');
+            subjects.forEach(s => {
+                const parts = s.split(':');
+                if (parts.length >= 3) {
+                    const status = parts[2].trim().toUpperCase();
+                    if (status.includes('FAIL') || status.includes('LESS THAN')) {
                         failedSubjects.push(parts[0].trim());
                     }
-                });
-                if (failedSubjects.length > 0) {
-                    displaySubjectPass = failedSubjects.join(', ');
+                } else if (parts.length >= 2) {
+                    const status = parts[1].trim().toUpperCase();
+                    if (status.includes('FAIL') || status.includes('LESS THAN')) {
+                        failedSubjects.push(parts[0].trim());
+                    }
                 }
+            });
+            if (failedSubjects.length > 0) {
+                displaySubjectPass = failedSubjects.join(', ');
+            } else {
+                displaySubjectPass = 'Pass all Subject';
             }
         }
         
-        return `
+        let rowHtml = `
         <tr>
             <td>${serialNumber}</td>
             <td>${row.Roll_Number || '-'}</td>
@@ -424,9 +561,26 @@ function renderTable() {
             <td>${row.Father_Name || '-'}</td>
             <td><strong>${row.Total_Marks || '-'}</strong></td>
             <td><div class="status-badge ${row.Status === 'PASS' ? 'success' : 'danger'}">${row.Status || '-'}</div></td>
-            <td>${displaySubjectPass}</td>
-        </tr>
-    `}).join('');
+            <td>${displaySubjectPass}</td>`;
+
+        visibleDynamicSubjects.forEach(subject => {
+            let mark = '-';
+            if (row.Subject_Pass && row.Subject_Pass !== '-' && row.Subject_Pass !== 'All Pass' && row.Subject_Pass.includes(':')) {
+                const subjects = row.Subject_Pass.split(',');
+                for (let s of subjects) {
+                    const parts = s.split(':');
+                    if (parts.length >= 2 && parts[0].trim() === subject) {
+                        mark = parts[1].trim();
+                        break;
+                    }
+                }
+            }
+            rowHtml += `<td>${mark}</td>`;
+        });
+
+        rowHtml += `</tr>`;
+        return rowHtml;
+    }).join('');
 
     renderPagination();
 }
@@ -443,7 +597,8 @@ function setupExport() {
             return;
         }
 
-        const headers = ['S.No.', 'Roll_Number', 'Name', 'Father_Name', 'Total_Marks', 'Status', 'Subject_Pass'];
+        const baseHeaders = ['S.No.', 'Roll_Number', 'Name', 'Father_Name', 'Total_Marks', 'Status', 'Subject_Pass'];
+        const headers = [...baseHeaders, ...visibleDynamicSubjects];
         let csv = headers.join(',') + '\n';
 
         filteredData.forEach((row, index) => {
@@ -456,6 +611,21 @@ function setupExport() {
                 row.Status || '',
                 row.Subject_Pass || ''
             ];
+
+            visibleDynamicSubjects.forEach(subject => {
+                let mark = '';
+                if (row.Subject_Pass && row.Subject_Pass !== '-' && row.Subject_Pass !== 'All Pass' && row.Subject_Pass.includes(':')) {
+                    const subjects = row.Subject_Pass.split(',');
+                    for (let s of subjects) {
+                        const parts = s.split(':');
+                        if (parts.length >= 2 && parts[0].trim() === subject) {
+                            mark = parts[1].trim();
+                            break;
+                        }
+                    }
+                }
+                rowData.push(mark);
+            });
             
             csv += rowData.map(val => {
                 // Escape quotes and wrap in quotes if contains comma

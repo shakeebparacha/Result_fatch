@@ -4,7 +4,11 @@ import threading
 import csv
 import os
 import io
-import pandas as pd
+try:
+    import pandas as pd
+except ImportError as e:
+    print(f"Warning: Pandas could not be imported ({e}). Excel upload will be disabled.")
+    pd = None
 from datetime import datetime
 
 app = Flask(__name__, template_folder='templates')
@@ -99,6 +103,8 @@ def upload_csv():
             fieldnames = reader.fieldnames
             rows = list(reader)
         else:
+            if pd is None:
+                 return jsonify({"status": "error", "message": "Excel files are not supported in your environment. Please upload a CSV instead."}), 400
             # Excel handler
             df = pd.read_excel(file.stream)
             df = df.fillna('') # Handle empty cells

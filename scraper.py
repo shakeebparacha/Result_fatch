@@ -173,36 +173,33 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
                     marks_table = driver.find_element(By.ID, "GridStudentData") 
                     all_rows = marks_table.find_elements(By.TAG_NAME, "tr")
                     
-                    # Extract header indices
-                    header_cells = all_rows[0].find_elements(By.TAG_NAME, "th")
-                    if not header_cells:
-                        header_cells = all_rows[0].find_elements(By.TAG_NAME, "td")
-                    
-                    subject_idx = -1
-                    status_idx = -1
-                    for i, th in enumerate(header_cells):
-                        th_text = th.text.strip().upper()
-                        if "NAME OF SUBJECT" in th_text:
-                            subject_idx = i
-                        elif "RESULT STATUS" in th_text or "STATUS" in th_text:
-                            status_idx = i
-                            
                     subject_results = []
                     
-                    # Parse subject rows
-                    if subject_idx != -1 and status_idx != -1:
-                        # Iterate through rows, skipping header and last row (totals)
-                        for row in all_rows[1:-1]:
-                            cells = row.find_elements(By.TAG_NAME, "td")
-                            if len(cells) > max(subject_idx, status_idx):
-                                subj_name = cells[subject_idx].text.strip()
-                                subj_status = cells[status_idx].text.strip().upper()
-                                # Consider 'LESS THAN 33%' as FAIL
-                                if "LESS THAN" in subj_status or subj_status == "FAIL":
-                                    subj_status = "FAIL"
-                                elif "PASS" in subj_status:
-                                    subj_status = "PASS"
-                                subject_results.append(f"{subj_name}:{subj_status}")
+                    for row in all_rows[1:-1]:
+                        cells = row.find_elements(By.TAG_NAME, "td")
+                        if not cells:
+                            continue
+                            
+                        num_cells = len(cells)
+                        
+                        if num_cells == 6:
+                            # Image 1 structure
+                            subj_name = cells[0].text.strip()
+                            subj_mark = cells[2].text.strip()
+                            subj_status = cells[5].text.strip()
+                        elif num_cells >= 11:
+                            # Image 2 structure
+                            subj_name = cells[0].text.strip()
+                            subj_mark = cells[5].text.strip()
+                            subj_status = cells[10].text.strip()
+                        else:
+                            continue
+                            
+                        # Skip header rows that might be caught as td
+                        if "SUBJECT" in subj_name.upper() or "MARKS" in subj_name.upper():
+                            continue
+                            
+                        subject_results.append(f"{subj_name}:{subj_mark}:{subj_status}")
                                 
                     last_row = all_rows[-1] 
                     last_cell = last_row.find_elements(By.TAG_NAME, "td")[-1]   

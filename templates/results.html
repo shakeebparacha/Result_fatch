@@ -56,6 +56,16 @@
                 </div>
             </div>
 
+            <!-- Column Visibility Filter -->
+            <div class="column-visibility-container" style="position: relative; display: inline-block; margin-left: 10px;">
+                <button type="button" class="btn btn-outline btn-small" id="columnVisibilityBtn">
+                    Subj_Numbers
+                </button>
+                <div id="columnVisibilityDropdown" class="subject-filter-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: white; color: #333; border: 1px solid #ccc; padding: 10px; z-index: 1000; min-width: 150px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 4px; max-height: 200px; overflow-y: auto;">
+                    <!-- Checkboxes for columns will be rendered here dynamically -->
+                </div>
+            </div>
+
             <div class="controls-right">
                 <select id="rowsPerPage" class="select-control">
                     <option value="10">10 rows</option>
@@ -82,7 +92,7 @@
             </div>
 
             <table class="results-table" id="resultsTable">
-                <thead>
+                <thead id="tableHeader">
                     <tr>
                         <th>S.No.</th>
                         <th onclick="sortTable(0)">Roll Number <span class="sort-icon">⬍</span></th>
@@ -91,6 +101,7 @@
                         <th onclick="sortTable(3)">Marks <span class="sort-icon">⬍</span></th>
                         <th onclick="sortTable(4)">Status <span class="sort-icon">⬍</span></th>
                         <th onclick="sortTable(5)">Subject Pass <span class="sort-icon">⬍</span></th>
+                        <!-- Dynamic subject headers will be added here -->
                     </tr>
                 </thead>
                 <tbody id="tableBody">
