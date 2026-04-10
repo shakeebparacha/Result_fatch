@@ -77,7 +77,7 @@ def normalize_delay_range(delay_range: Tuple[int, int]) -> Tuple[int, int]:
     return low, high
 
 
-def load_roll_numbers(roll_input: str) -> List[int]:
+def load_roll_numbers(roll_input: str, return_details: bool = False):
     roll_numbers: List[int] = []
     invalid_entries: List[str] = []
     duplicate_entries: List[str] = []
@@ -123,6 +123,9 @@ def load_roll_numbers(roll_input: str) -> List[int]:
         print("Duplicate roll numbers removed:", ", ".join(duplicate_entries))
     if invalid_entries:
         print("Invalid roll numbers removed (non-numeric or >7 digits):", ", ".join(invalid_entries))
+
+    if return_details:
+        return roll_numbers, duplicate_entries, invalid_entries
 
     return roll_numbers
 

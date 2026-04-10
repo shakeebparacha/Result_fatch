@@ -8,5 +8,7 @@ openpyxl
 ddddocr
 reportlab
 tqdm
+redis
+rq
 
 

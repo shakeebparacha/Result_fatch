@@ -112,6 +112,22 @@ set SCRAPER_MAX_WORKERS=10
 $env:SCRAPER_MAX_WORKERS="10"
 ```
 
+## 8) Render deployment (recommended)
+
+Render web services should stay responsive, so run scraping in a worker.
+
+1. Create a Redis instance on Render.
+2. Set `REDIS_URL` in both the web and worker services.
+3. Start commands:
+
+```bash
+# Web service
+python app.py
+
+# Worker service
+python worker.py
+```
+
 ## 8) CSV format
 
 Required columns:

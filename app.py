@@ -1,5 +1,8 @@
 from flask import Flask, request, jsonify, render_template, send_file
+from redis import Redis
+from rq import Queue
 from scraper import load_roll_numbers, scrape_roll_numbers_parallel
+from tasks import run_scrape_job
 import threading
 import csv
 import os
@@ -22,6 +25,9 @@ app = Flask(__name__, template_folder='templates')
 
 # Ensure Student_Results.csv is in the correct location
 CSV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Student_Results.csv')
+REDIS_URL = os.getenv("REDIS_URL")
+redis_conn = Redis.from_url(REDIS_URL) if REDIS_URL else None
+queue = Queue(connection=redis_conn) if redis_conn else None
 
 # ================== PDF GENERATION FUNCTIONS ==================
 
@@ -226,8 +232,35 @@ scraping_status = {
     "total": 0,
     "processed": 0,
     "success": 0,
-    "messagde": ""
+    "message": "",
+    "job_id": None
 }
+
+def build_job_status(job_id: str):
+    job = queue.fetch_job(job_id) if queue else None
+    if not job:
+        return {
+            "is_running": False,
+            "total": 0,
+            "processed": 0,
+            "success": 0,
+            "message": "No active job found.",
+            "job_id": job_id
+        }
+
+    meta = job.meta or {}
+    is_running = job.is_queued or job.is_started
+    return {
+        "is_running": is_running,
+        "total": meta.get("total", 0),
+        "processed": meta.get("processed", 0),
+        "success": meta.get("success", 0),
+        "message": meta.get("message", ""),
+        "job_id": job.id,
+        "duplicate_rolls": meta.get("duplicate_rolls", []),
+        "invalid_rolls": meta.get("invalid_rolls", []),
+        "failed_rolls": meta.get("failed_rolls", []),
+    }
 
 @app.route('/')
 def home():
@@ -460,6 +493,10 @@ def background_scraper(roll_numbers, course, exam_year, exam_type_val):
 def start_scraping():
     """Start background scraping task"""
     global scraping_status
+    if queue and scraping_status.get("job_id"):
+        current_status = build_job_status(scraping_status["job_id"])
+        if not current_status.get("is_running"):
+            scraping_status["is_running"] = False
     if scraping_status["is_running"]:
         return jsonify({"status": "error", "message": "A scraping task is already running."}), 400
     try:
@@ -468,11 +505,29 @@ def start_scraping():
         course = data.get('courseType', 'HSSC')
         exam_year = data.get('examYear', '2024')
         exam_type_val = data.get('examTypeVal', '2')
-        
+
+        if queue:
+            job = queue.enqueue(
+                run_scrape_job,
+                roll_numbers,
+                course,
+                exam_year,
+                exam_type_val,
+                CSV_FILE,
+                job_timeout=3600
+            )
+            scraping_status["is_running"] = True
+            scraping_status["job_id"] = job.id
+            return jsonify({
+                "status": "success",
+                "message": "Job queued. Monitoring progress...",
+                "job_id": job.id
+            })
+
         thread = threading.Thread(target=background_scraper, args=(roll_numbers, course, exam_year, exam_type_val))
         thread.daemon = True
         thread.start()
-        
+
         return jsonify({
             "status": "success",
             "message": "Bot is starting! Check the tracking log below..."
@@ -484,6 +539,13 @@ def start_scraping():
 def scrape_status():
     """Get the current progress of the scraper"""
     global scraping_status
+    job_id = request.args.get("job_id") or scraping_status.get("job_id")
+    if queue and job_id:
+        status = build_job_status(job_id)
+        if not status["is_running"]:
+            scraping_status["is_running"] = False
+        return jsonify(status)
+
     return jsonify(scraping_status)
 
 @app.route('/api/download-pdf', methods=['GET', 'POST'])

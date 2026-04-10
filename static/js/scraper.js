@@ -10,7 +10,9 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function checkInitialStatus() {
-    fetch('/api/scrape-status')
+    const jobId = localStorage.getItem('scrapeJobId');
+    const statusUrl = jobId ? `/api/scrape-status?job_id=${encodeURIComponent(jobId)}` : '/api/scrape-status';
+    fetch(statusUrl)
         .then(res => res.json())
         .then(status => {
             if (status.is_running) {
@@ -66,6 +68,9 @@ function handleScraperSubmit(e) {
     .then(response => response.json())
     .then(data => {
         if (data.status === 'success') {
+            if (data.job_id) {
+                localStorage.setItem('scrapeJobId', data.job_id);
+            }
             logToTerminal(`> Roll Numbers: ${rollNumbers}`, 'terminal-info');
             logToTerminal(`> ${data.message}`, 'terminal-success');
             startPollingStatus();
@@ -89,7 +94,9 @@ function startPollingStatus() {
     let lastMessage = "";
     
     const intervalId = setInterval(() => {
-        fetch('/api/scrape-status')
+        const jobId = localStorage.getItem('scrapeJobId');
+        const statusUrl = jobId ? `/api/scrape-status?job_id=${encodeURIComponent(jobId)}` : '/api/scrape-status';
+        fetch(statusUrl)
             .then(res => res.json())
             .then(status => {
                 if (status.message && status.message !== lastMessage) {
@@ -102,6 +109,12 @@ function startPollingStatus() {
                     submitBtn.disabled = false;
                     logToTerminal(`> Done! Successfully processed ${status.success} out of ${status.total} students.`, 'terminal-success');
                     logToTerminal(`> Please check the '/results' page to view and visualize the newly added data.`, 'terminal-warning');
+                    if (status.duplicate_rolls && status.duplicate_rolls.length > 0) {
+                        logToTerminal(`> Duplicate roll numbers removed: ${status.duplicate_rolls.join(', ')}`, 'terminal-warning');
+                    }
+                    if (status.invalid_rolls && status.invalid_rolls.length > 0) {
+                        logToTerminal(`> Invalid roll numbers removed: ${status.invalid_rolls.join(', ')}`, 'terminal-warning');
+                    }
                 }
             })
             .catch(err => {
