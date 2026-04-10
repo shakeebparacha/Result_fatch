@@ -79,6 +79,20 @@ def normalize_delay_range(delay_range: Tuple[int, int]) -> Tuple[int, int]:
 
 def load_roll_numbers(roll_input: str) -> List[int]:
     roll_numbers: List[int] = []
+    invalid_entries: List[str] = []
+    duplicate_entries: List[str] = []
+    seen: set = set()
+
+    def add_roll(value: int, label: str) -> None:
+        if len(str(value)) > 7:
+            invalid_entries.append(label)
+            return
+        if value in seen:
+            duplicate_entries.append(label)
+            return
+        seen.add(value)
+        roll_numbers.append(value)
+
     for part in roll_input.split(","):
         part = part.strip()
         if not part:
@@ -86,11 +100,30 @@ def load_roll_numbers(roll_input: str) -> List[int]:
         if "-" in part:
             try:
                 start, end = part.split("-")
-                roll_numbers.extend(range(int(start), int(end) + 1))
+                start = start.strip()
+                end = end.strip()
+                if not start.isdigit() or not end.isdigit():
+                    invalid_entries.append(part)
+                    continue
+                start_val = int(start)
+                end_val = int(end)
+                if start_val > end_val:
+                    start_val, end_val = end_val, start_val
+                for value in range(start_val, end_val + 1):
+                    add_roll(value, str(value))
             except ValueError:
+                invalid_entries.append(part)
                 continue
         elif part.isdigit():
-            roll_numbers.append(int(part))
+            add_roll(int(part), part)
+        else:
+            invalid_entries.append(part)
+
+    if duplicate_entries:
+        print("Duplicate roll numbers removed:", ", ".join(duplicate_entries))
+    if invalid_entries:
+        print("Invalid roll numbers removed (non-numeric or >7 digits):", ", ".join(invalid_entries))
+
     return roll_numbers
 
 
