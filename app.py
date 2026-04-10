@@ -11,10 +11,198 @@ except ImportError as e:
     pd = None
 from datetime import datetime
 
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
 app = Flask(__name__, template_folder='templates')
 
 # Ensure Student_Results.csv is in the correct location
 CSV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Student_Results.csv')
+
+# ================== PDF GENERATION FUNCTIONS ==================
+
+def calculate_statistics():
+    """Calculate overall statistics from CSV data"""
+    stats = {
+        'total_students': 0,
+        'pass_count': 0,
+        'fail_count': 0,
+        'subjects': {}  # subject -> {total, pass, fail}
+    }
+    
+    if not os.path.exists(CSV_FILE):
+        return stats
+    
+    try:
+        with open(CSV_FILE, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # ignore completely empty rows or rows without roll numbers
+                if not any(str(v).strip() for v in row.values()) or not row.get('Roll_Number') or not str(row.get('Roll_Number')).strip():
+                    continue
+                    
+                stats['total_students'] += 1
+                status = row.get('Status', '').upper()
+                
+                if 'PASS' in status:
+                    stats['pass_count'] += 1
+                else:
+                    stats['fail_count'] += 1
+                
+                # Parse subject information if available
+                subject_info = row.get('Subject_Pass', '')
+                if subject_info and 'PASS' not in status:
+                    subjects_list = [s.strip() for s in subject_info.split(',')]
+                    for subject in subjects_list:
+                        if subject not in stats['subjects']:
+                            stats['subjects'][subject] = {'total': 0, 'pass': 0, 'fail': 0}
+                        stats['subjects'][subject]['total'] += 1
+                        stats['subjects'][subject]['fail'] += 1
+    except Exception as e:
+        print(f"Error calculating statistics: {e}")
+    
+    return stats
+
+def generate_pdf_report():
+    """Generate a professional PDF report with statistics"""
+    from io import BytesIO
+    
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    story = []
+    styles = getSampleStyleSheet()
+    
+    # Custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#4f46e5'),
+        spaceAfter=6,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold'
+    )
+    
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.HexColor('#4338ca'),
+        spaceAfter=12,
+        spaceBefore=12,
+        fontName='Helvetica-Bold'
+    )
+    
+    normal_style = ParagraphStyle(
+        'CustomNormal',
+        parent=styles['Normal'],
+        fontSize=10,
+        spaceAfter=6
+    )
+    
+    # Title
+    title = Paragraph("BISE LAHORE EXAMINATION RESULTS REPORT", title_style)
+    story.append(title)
+    
+    # Generated date
+    date_text = Paragraph(f"<i>Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</i>", normal_style)
+    story.append(date_text)
+    story.append(Spacer(1, 0.3*inch))
+    
+    # Get statistics
+    stats = calculate_statistics()
+    
+    # ===== OVERALL STATISTICS TABLE =====
+    story.append(Paragraph("OVERALL STATISTICS", heading_style))
+    
+    total = stats['total_students']
+    pass_count = stats['pass_count']
+    fail_count = stats['fail_count']
+    
+    # Calculate percentages
+    pass_pct = (pass_count / total * 100) if total > 0 else 0
+    fail_pct = (fail_count / total * 100) if total > 0 else 0
+    
+    overall_data = [
+        ['Metric', 'Count', 'Percentage'],
+        ['Total Students', str(total), f'{100:.1f}%'],
+        ['Passed', str(pass_count), f'{pass_pct:.1f}%'],
+        ['Failed/Supply', str(fail_count), f'{fail_pct:.1f}%'],
+    ]
+    
+    overall_table = Table(overall_data, colWidths=[3*inch, 1.5*inch, 1.5*inch])
+    overall_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4f46e5')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTSIZE', (0, 1), (-1, -1), 10),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f3f4f6')]),
+    ]))
+    
+    story.append(overall_table)
+    story.append(Spacer(1, 0.3*inch))
+    
+    # ===== SUBJECT-WISE DETAILS TABLE =====
+    if stats['subjects']:
+        story.append(PageBreak())
+        story.append(Paragraph("SUBJECT-WISE ANALYSIS", heading_style))
+        
+        subject_data = [
+            ['Subject', 'Total Students', 'Passed', 'Failed/Supply', 'Pass Rate'],
+        ]
+        
+        for subject, counts in sorted(stats['subjects'].items()):
+            total_sub = counts['total']
+            pass_sub = counts['total'] - counts['fail']
+            fail_sub = counts['fail']
+            pass_rate = (pass_sub / total_sub * 100) if total_sub > 0 else 0
+            
+            subject_data.append([
+                subject,
+                str(total_sub),
+                str(pass_sub),
+                str(fail_sub),
+                f'{pass_rate:.1f}%'
+            ])
+        
+        subject_table = Table(subject_data, colWidths=[2*inch, 1.3*inch, 1*inch, 1.2*inch, 1.2*inch])
+        subject_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4f46e5')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f3f4f6')]),
+        ]))
+        
+        story.append(subject_table)
+    
+    story.append(Spacer(1, 0.3*inch))
+    
+    # Footer note
+    footer = Paragraph(
+        "<i>This report is auto-generated from the BISE Lahore Examination Result Scraper. All data is confidential.</i>",
+        ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.grey, alignment=TA_CENTER)
+    )
+    story.append(footer)
+    
+    # Build PDF
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
 
 # ================== INITIALIZATION ==================
 def initialize_csv():
@@ -38,7 +226,7 @@ scraping_status = {
     "total": 0,
     "processed": 0,
     "success": 0,
-    "message": ""
+    "messagde": ""
 }
 
 @app.route('/')
@@ -71,7 +259,14 @@ def get_results():
         if os.path.exists(CSV_FILE):
             with open(CSV_FILE, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
-                results_list = list(reader)
+                # Ignore rows where 'Roll_Number' or 'Name' is completely empty or just spaces.
+                # Adjust depending on which columns must be filled for a row to be valid.
+                results_list = [
+                    row for row in reader 
+                    if any(str(v).strip() for v in row.values())
+                    and row.get('Roll_Number') 
+                    and str(row.get('Roll_Number')).strip()
+                ]
         
         response = jsonify({"status": "success", "data": results_list})
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
@@ -184,7 +379,12 @@ def get_graph_data():
         if os.path.exists(CSV_FILE):
             with open(CSV_FILE, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
-                results_list = list(reader)
+                results_list = [
+                    row for row in reader 
+                    if any(str(v).strip() for v in row.values())
+                    and row.get('Roll_Number') 
+                    and str(row.get('Roll_Number')).strip()
+                ]
         
         # Process data for graphs
         pass_count = 0
@@ -279,6 +479,50 @@ def scrape_status():
     """Get the current progress of the scraper"""
     global scraping_status
     return jsonify(scraping_status)
+
+@app.route('/api/download-pdf', methods=['GET', 'POST'])
+def download_pdf():
+    """Generate and download PDF report"""
+    try:
+        import generate_report
+        import importlib
+        importlib.reload(generate_report)
+        institute_name = request.args.get('institute_name', 'INSTITUTE OF EXCELLENCE')
+        
+        import uuid
+        pdf_id = uuid.uuid4().hex
+        
+        pdf_csv_path = CSV_FILE
+        temp_csv = None
+        if request.method == 'POST' and request.is_json:
+            data = request.json
+            if data and len(data) > 0:
+                import pandas as pd
+                temp_csv = f"temp_data_{pdf_id}.csv"
+                pd.DataFrame(data).to_csv(temp_csv, index=False)
+                pdf_csv_path = temp_csv
+
+        pdf_filename = f"Academic_Performance_Report_{pdf_id}.pdf"
+        generate_report.generate_report(csv_file=pdf_csv_path, output_pdf=pdf_filename, institute_name=institute_name)
+        
+        response = send_file(
+            os.path.abspath(pdf_filename),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'Report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        )
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        
+        # Cleanup
+        if temp_csv and os.path.exists(temp_csv):
+            try: os.remove(temp_csv)
+            except: pass
+            
+        return response
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 # ================== ERROR HANDLERS ==================
 

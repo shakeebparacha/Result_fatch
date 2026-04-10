@@ -6,9 +6,16 @@
 {% block content %}
 <section class="graphs-section">
     <div class="container">
-        <div class="section-header">
-            <h1>Data Visualizations</h1>
-            <p>Visual analysis of student performance and results</p>
+        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1>Data Visualizations</h1>
+                <p>Visual analysis of student performance and results</p>
+            </div>
+            <div>
+                <button id="downloadPdfBtn" class="btn btn-primary">
+                    📄 Download PDF Report
+                </button>
+            </div>
         </div>
 
         <!-- Stats Cards -->

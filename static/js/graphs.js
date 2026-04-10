@@ -59,6 +59,53 @@ function loadGraphData() {
         });
 }
 
+document.addEventListener('DOMContentLoaded', function() {
+    const pdfBtn = document.getElementById('downloadPdfBtn');
+    if (pdfBtn) {
+        pdfBtn.addEventListener('click', () => {
+            let instituteName = prompt("Please enter the Institute Name for the report:", "INSTITUTE OF EXCELLENCE");
+            if (instituteName === null) {
+                return; // User cancelled
+            }
+
+            // Show loading indicator
+            pdfBtn.disabled = true;
+            pdfBtn.textContent = '⏳ Generating PDF...';
+
+            fetch(`/api/download-pdf?institute_name=${encodeURIComponent(instituteName)}&t=${Date.now()}`, {
+                method: 'GET'
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to generate PDF');
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    // Create download link
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Academic_Performance_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+
+                    // Reset button
+                    pdfBtn.disabled = false;
+                    pdfBtn.textContent = '📄 Download PDF Report';
+                })
+                .catch(error => {
+                    console.error('Error generating PDF:', error);
+                    alert('Error generating PDF: ' + error.message);
+                    pdfBtn.disabled = false;
+                    pdfBtn.textContent = '📄 Download PDF Report';
+                });
+        });
+    }
+});
+
 function renderPieChart(passCount, failCount) {
     const ctx = document.getElementById('pieChart');
     if (!ctx) return;

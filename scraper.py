@@ -237,10 +237,22 @@ def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='202
 
                 csv_filename = "Student_Results.csv"
                 file_exists = os.path.isfile(csv_filename)
+                
+                fieldnames = ['Roll_Number', 'Name', 'Father_Name', 'Total_Marks', 'Status', 'Subject_Pass']
+                
+                if file_exists:
+                    try:
+                        with open(csv_filename, 'r', encoding='utf-8') as f:
+                            reader = csv.reader(f)
+                            existing_headers = next(reader, None)
+                            if existing_headers:
+                                fieldnames = existing_headers
+                    except Exception:
+                        pass # keep default fieldnames
 
                 with open(csv_filename, 'a', newline='', encoding='utf-8') as csvfile:
-                    fieldnames = ['Roll_Number', 'Name', 'Father_Name', 'Total_Marks', 'Status', 'Subject_Pass']
-                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames) 
+                    # extrasaction='ignore' prevents errors if a field in the row dictionary isn't in the CSV headers
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore') 
 
                     if not file_exists:
                         writer.writeheader() # Write the columns at the top if file is new

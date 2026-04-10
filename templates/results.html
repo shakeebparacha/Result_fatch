@@ -42,14 +42,20 @@
 
         <!-- Controls & Search -->
         <div class="controls-section">
-            <div class="search-box">
-                <input type="text" id="searchInput" placeholder="🔍 Search by Roll Number or Name..." class="search-input">
+            <div class="search-box" style="display: flex; gap: 10px; align-items: center; flex: 1;">
+                <input type="text" id="searchInput" placeholder="🔍 Search by Roll Number or Name..." class="search-input" style="flex: 1;">
+                <select id="rowsPerPage" class="select-control">
+                    <option value="10">10 rows</option>
+                    <option value="25">25 rows</option>
+                    <option value="50">50 rows</option>
+                    <option value="100">100 rows</option>
+                </select>
             </div>
 
             <!-- Subject Filter (Checkboxes) -->
-            <div class="subject-filter-container" style="position: relative; display: inline-block;">
+            <div class="subject-filter-container" style="position: relative; display: flex; align-items: center; margin-left: auto;">
                 <button type="button" class="btn btn-outline btn-small" id="subjectFilterBtn">
-                    🎯 Filter Subjects
+                    Fail/Pass
                 </button>
                 <div id="subjectFilterDropdown" class="subject-filter-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: white; color: #333; border: 1px solid #ccc; padding: 10px; z-index: 1000; min-width: 150px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 4px; max-height: 200px; overflow-y: auto;">
                     <!-- Checkboxes will be rendered here dynamically -->
@@ -57,9 +63,9 @@
             </div>
 
             <!-- Column Visibility Filter -->
-            <div class="column-visibility-container" style="position: relative; display: inline-block; margin-left: 10px;">
+            <div class="column-visibility-container" style="position: relative; display: flex; align-items: center;">
                 <button type="button" class="btn btn-outline btn-small" id="columnVisibilityBtn">
-                    Subj_Numbers
+                    🎯 Filter Subjects
                 </button>
                 <div id="columnVisibilityDropdown" class="subject-filter-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: white; color: #333; border: 1px solid #ccc; padding: 10px; z-index: 1000; min-width: 150px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 4px; max-height: 200px; overflow-y: auto;">
                     <!-- Checkboxes for columns will be rendered here dynamically -->
@@ -67,13 +73,6 @@
             </div>
 
             <div class="controls-right">
-                <select id="rowsPerPage" class="select-control">
-                    <option value="10">10 rows</option>
-                    <option value="25">25 rows</option>
-                    <option value="50">50 rows</option>
-                    <option value="100">100 rows</option>
-                </select>
-
                 <button id="clearDataBtn" class="btn btn-danger btn-small" onclick="clearData()">
                     🗑️ Clear Data
                 </button>
