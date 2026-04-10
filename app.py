@@ -249,6 +249,11 @@ def scraper():
     """Scraper automation page"""
     return render_template('scraper.html')
 
+@app.route('/contact')
+def contact():
+    """Contact page"""
+    return render_template('contact.html')
+
 # ================== API ENDPOINTS ==================
 
 @app.route('/api/results', methods=['GET'])
