@@ -444,7 +444,7 @@ def background_scraper(roll_numbers, course, exam_year, exam_type_val):
         course=course,
         exam_type=exam_type_val,
         year=exam_year,
-        max_workers=5,
+        max_workers=int(os.getenv("SCRAPER_MAX_WORKERS", "10")),
         csv_file=CSV_FILE,
         progress_callback=progress_callback,
         use_tqdm=False,

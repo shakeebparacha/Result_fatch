@@ -18,7 +18,9 @@ BASE_URL = "https://result.biselahore.com/"
 DEFAULT_TIMEOUT = 12
 DEFAULT_DELAY_RANGE = (2, 5)
 DEFAULT_MAX_ATTEMPTS = 5
-DEFAULT_MAX_WORKERS = 5
+DEFAULT_MAX_WORKERS = 10
+DEFAULT_POOL_MAXSIZE = 50
+DEFAULT_FLUSH_EVERY = 25
 
 DEFAULT_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -54,10 +56,25 @@ def get_ocr() -> ddddocr.DdddOcr:
     return _thread_local.ocr
 
 
-def create_session() -> requests.Session:
-    session = requests.Session()
-    session.headers.update(DEFAULT_HEADERS)
-    return session
+def get_session() -> requests.Session:
+    if not hasattr(_thread_local, "session"):
+        session = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=DEFAULT_POOL_MAXSIZE,
+            pool_maxsize=DEFAULT_POOL_MAXSIZE,
+        )
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        session.headers.update(DEFAULT_HEADERS)
+        _thread_local.session = session
+    return _thread_local.session
+
+
+def normalize_delay_range(delay_range: Tuple[int, int]) -> Tuple[int, int]:
+    low, high = delay_range
+    low = max(0, int(low))
+    high = max(low, int(high))
+    return low, high
 
 
 def load_roll_numbers(roll_input: str) -> List[int]:
@@ -224,7 +241,8 @@ def process_roll_number(
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     delay_range: Tuple[int, int] = DEFAULT_DELAY_RANGE,
 ) -> Dict[str, str]:
-    session = create_session()
+    session = get_session()
+    delay_range = normalize_delay_range(delay_range)
     for attempt in range(1, max_attempts + 1):
         time.sleep(random.uniform(*delay_range))
         try:
@@ -316,11 +334,20 @@ def scrape_roll_numbers_parallel(
     csv_file: str = "Student_Results.csv",
     progress_callback: Optional[callable] = None,
     use_tqdm: bool = False,
+    flush_every: int = DEFAULT_FLUSH_EVERY,
 ) -> Dict[str, object]:
     setup_logging()
 
+    if not roll_numbers:
+        return {"total": 0, "success": 0, "failed": 0, "failed_rolls": []}
+
+    max_workers = max(1, min(max_workers, len(roll_numbers)))
+    delay_range = normalize_delay_range(delay_range)
+    flush_every = max(1, int(flush_every))
+
     results: List[Dict[str, str]] = []
     failed_rolls: List[int] = []
+    pending_rows: List[Dict[str, str]] = []
 
     def worker(roll_no: int) -> Tuple[int, Dict[str, str]]:
         result = process_roll_number(
@@ -345,13 +372,20 @@ def scrape_roll_numbers_parallel(
             roll_no, result = future.result()
             if result.get("success") == "True":
                 results.append(result)
-                save_results([result], csv_file)
+                pending_rows.append(result)
+                if len(pending_rows) >= flush_every:
+                    save_results(pending_rows, csv_file)
+                    pending_rows.clear()
             else:
                 failed_rolls.append(roll_no)
                 _logger.info("Failed roll %s: %s", roll_no, result.get("error"))
 
             if progress_callback:
                 progress_callback(roll_no, result)
+
+        if pending_rows:
+            save_results(pending_rows, csv_file)
+            pending_rows.clear()
 
     if failed_rolls:
         with open("failed_rolls.txt", "w", encoding="utf-8") as file:
