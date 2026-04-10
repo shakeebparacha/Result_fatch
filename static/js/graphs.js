@@ -5,6 +5,21 @@ let barChart = null;
 let studentPerformanceChart = null;
 let subjectPassRatioChart = null;
 
+function deriveStatus(row) {
+    const statusRaw = String(row.Status || '').trim();
+    const marksRaw = String(row.Total_Marks || '').trim();
+    const source = statusRaw || marksRaw;
+    if (!source) return '';
+
+    const upper = source.toUpperCase();
+    if (upper.includes('PASS')) return 'PASS';
+    if (/^\d+$/.test(upper)) return 'PASS';
+    if (upper.includes('FAIL')) return 'FAIL';
+    if (upper.includes('ABSENT')) return 'ABSENT';
+    if (upper.includes('SUPPLY')) return 'SUPPLY';
+    return upper;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     loadGraphData();
     
@@ -30,10 +45,10 @@ function loadGraphData() {
             let failCount = 0;
 
             results.forEach(row => {
-                const status = String(row.Status || '').trim().toUpperCase();
-                if (status === 'PASS' || status.includes('PASS')) {
+                const status = deriveStatus(row);
+                if (status === 'PASS') {
                     passCount++;
-                } else if (status === 'FAIL' || status.includes('FAIL')) {
+                } else if (status) {
                     failCount++;
                 }
                 // absentCount is inferred as (total - passCount - failCount) later

@@ -31,6 +31,7 @@
 - ✅ Batch processing (ranges & individual)
 - ✅ Live terminal output
 - ✅ Background processing
+- ✅ Requests-based scraping (no Selenium) with retries and delays
 
 #### 📱 Responsive Design
 - ✅ Fully mobile-friendly (tested on 320px+)
@@ -161,6 +162,18 @@ Result_fatch/
 4. Choose exam type (Part-II/Part-I/Supplementary)
 5. Click **Start Scraping Automation**
 6. Monitor progress in terminal
+
+### ⚡ Requests Scraper (CLI)
+Run the high-performance requests scraper without opening browsers:
+
+```bash
+python scraper.py
+```
+
+Notes:
+- Uses parallel workers, retries, random delays, and browser-like headers.
+- Progress is shown with tqdm.
+- Failed roll numbers are saved to failed_rolls.txt for easy re-run.
 
 ---
 

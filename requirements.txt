@@ -1,7 +1,5 @@
 flask
-selenium
 beautifulsoup4
-webdriver-manager
 requests
 gunicorn
 Pillow
@@ -9,5 +7,6 @@ pandas
 openpyxl
 ddddocr
 reportlab
+tqdm
 
 

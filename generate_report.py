@@ -7,6 +7,88 @@ import matplotlib.pyplot as plt
 import numpy as np
 import sys
 import os
+import re
+
+def derive_status_value(status_value, marks_value):
+    status_raw = str(status_value or "").strip()
+    marks_raw = str(marks_value or "").strip()
+    source = status_raw if status_raw else marks_raw
+    if not source:
+        return ""
+
+    upper = source.upper()
+    if "PASS" in upper:
+        return "PASS"
+    if upper.isdigit():
+        return "PASS"
+    if "FAIL" in upper:
+        return "FAIL"
+    if "ABSENT" in upper:
+        return "ABSENT"
+    if "SUPPLY" in upper:
+        return "SUPPLY"
+    return upper
+
+def build_subject_stats(subject_pass_series):
+    stats = {}
+    for raw in subject_pass_series.dropna():
+        text = str(raw).strip()
+        if not text or text.lower() == "all pass" or ":" not in text:
+            continue
+
+        for part in text.split(","):
+            part = part.strip()
+            if not part or ":" not in part:
+                continue
+            pieces = part.split(":")
+            subject_name = pieces[0].strip().upper()
+            mark_raw = pieces[1].strip() if len(pieces) > 2 else ""
+            status_str = pieces[-1].strip().upper()
+            if not subject_name:
+                continue
+            if subject_name not in stats:
+                stats[subject_name] = {"pass": 0, "fail": 0, "min_mark": None, "max_mark": None}
+            if "PASS" in status_str:
+                stats[subject_name]["pass"] += 1
+            else:
+                stats[subject_name]["fail"] += 1
+
+            if mark_raw:
+                mark_match = re.findall(r"\d+", mark_raw)
+                if mark_match:
+                    mark_value = float(mark_match[0])
+                    current_min = stats[subject_name]["min_mark"]
+                    current_max = stats[subject_name]["max_mark"]
+                    stats[subject_name]["min_mark"] = mark_value if current_min is None else min(current_min, mark_value)
+                    stats[subject_name]["max_mark"] = mark_value if current_max is None else max(current_max, mark_value)
+
+    return stats
+
+def parse_critical_subjects(row, subject_numeric_cols):
+    if subject_numeric_cols:
+        weak_subjs = []
+        for col in subject_numeric_cols:
+            mark = pd.to_numeric(row.get(col, 100), errors='coerce')
+            if pd.notna(mark) and mark < 40:
+                weak_subjs.append(str(col).title())
+        return weak_subjs
+
+    subject_pass = str(row.get('Subject_Pass', '')).strip()
+    if not subject_pass or subject_pass.lower() == 'all pass' or ':' not in subject_pass:
+        return []
+
+    weak_subjs = []
+    for part in subject_pass.split(','):
+        part = part.strip()
+        if not part or ':' not in part:
+            continue
+        pieces = part.split(':')
+        subject_name = pieces[0].strip()
+        status_str = pieces[-1].strip().upper()
+        if subject_name and 'PASS' not in status_str:
+            weak_subjs.append(subject_name.title())
+
+    return weak_subjs
 
 def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Performance_Report.pdf", institute_name="INSTITUTE OF EXCELLENCE"):
     if not os.path.exists(csv_file):
@@ -39,16 +121,21 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
 
     # Convert status to proper case
     df['Status'] = df['Status'].astype(str).str.upper()
+    df['Derived_Status'] = df.apply(
+        lambda row: derive_status_value(row.get('Status', ''), row.get('Total_Marks', '')),
+        axis=1
+    )
 
     # Calculate Metrics
     total_students = len(df)
-    total_passed = len(df[df['Status'] == 'PASS'])
+    total_passed = len(df[df['Derived_Status'] == 'PASS'])
     total_failed = total_students - total_passed
     pass_rate = (total_passed / total_students * 100) if total_students > 0 else 0
     fail_rate = (total_failed / total_students * 100) if total_students > 0 else 0
-    df['Total_Marks'] = pd.to_numeric(df['Total_Marks'], errors='coerce').fillna(0)
+    marks_text = df['Total_Marks'].astype(str).str.extract(r'(\d+)')[0]
+    df['Total_Marks'] = pd.to_numeric(marks_text, errors='coerce').fillna(0)
     
-    passed_df = df[df['Status'] == 'PASS']
+    passed_df = df[df['Derived_Status'] == 'PASS']
     avg_score_passed = passed_df['Total_Marks'].mean() if not passed_df.empty else 0
     highest_score = df['Total_Marks'].max() if len(df) > 0 else 0
     
@@ -59,7 +146,9 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
     numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
     # Exclude non-subject generic numeric columns like S.No
     exclude_cols = ['Roll_Number', 'Total_Marks', 'S.No', 'S.No.', 'S_No', 'Sr.No', 'Sr. No.', 'Unnamed: 0']
-    subject_cols = [c for c in numeric_cols if c not in exclude_cols and not str(c).lower().startswith('s.n')]
+    subject_numeric_cols = [c for c in numeric_cols if c not in exclude_cols and not str(c).lower().startswith('s.n')]
+    subject_stats = build_subject_stats(df['Subject_Pass']) if 'Subject_Pass' in df.columns else {}
+    subject_chart_cols = subject_numeric_cols if subject_numeric_cols else sorted(subject_stats.keys())
 
     chart_paths = []
 
@@ -75,39 +164,40 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
     chart_paths.append(pie_chart_path)
 
     # Subject based charts if subjects exist
-    if subject_cols:
+    if subject_chart_cols:
         # Instead of hardcoded pass mark, parse the Subject_Pass column if available, 
         # or fall back to 33% of 100 as a rough estimate if it's not.
-        subj_passes = pd.Series(0, index=subject_cols)
-        subj_fails = pd.Series(0, index=subject_cols)
-        
-        if 'Subject_Pass' in df.columns:
-            for row in df['Subject_Pass'].dropna():
-                parts = [p.strip() for p in row.split(',')]
-                for part in parts:
-                    sub_parts = part.split(':')
-                    if len(sub_parts) >= 3:
-                        subj_name = sub_parts[0].strip().upper()
-                        status_str = sub_parts[-1].strip().upper()
-                        # Some mappings between names in Subject_Pass and columns might be needed if they differ by case
-                        # Find the closest matching column
-                        matching_col = next((c for c in subject_cols if str(c).strip().upper() == subj_name), None)
-                        if matching_col:
-                            if 'PASS' in status_str:
-                                subj_passes[matching_col] += 1
-                            else:
-                                subj_fails[matching_col] += 1
-            
-            # For any subject that didn't get counted via Subject_Pass, use a fallback pass_mark of 33
-            for c in subject_cols:
-                if subj_passes[c] == 0 and subj_fails[c] == 0:
-                    subj_passes[c] = (pd.to_numeric(df[c], errors='coerce') >= 33).sum()
-                    subj_fails[c] = (pd.to_numeric(df[c], errors='coerce') < 33).sum()
+        if subject_numeric_cols:
+            subj_passes = pd.Series(0, index=subject_numeric_cols)
+            subj_fails = pd.Series(0, index=subject_numeric_cols)
+
+            if 'Subject_Pass' in df.columns:
+                for row in df['Subject_Pass'].dropna():
+                    parts = [p.strip() for p in row.split(',')]
+                    for part in parts:
+                        sub_parts = part.split(':')
+                        if len(sub_parts) >= 3:
+                            subj_name = sub_parts[0].strip().upper()
+                            status_str = sub_parts[-1].strip().upper()
+                            matching_col = next((c for c in subject_numeric_cols if str(c).strip().upper() == subj_name), None)
+                            if matching_col:
+                                if 'PASS' in status_str:
+                                    subj_passes[matching_col] += 1
+                                else:
+                                    subj_fails[matching_col] += 1
+
+                for c in subject_numeric_cols:
+                    if subj_passes[c] == 0 and subj_fails[c] == 0:
+                        subj_passes[c] = (pd.to_numeric(df[c], errors='coerce') >= 33).sum()
+                        subj_fails[c] = (pd.to_numeric(df[c], errors='coerce') < 33).sum()
+            else:
+                pass_mark = 33
+                for c in subject_numeric_cols:
+                    subj_passes[c] = (pd.to_numeric(df[c], errors='coerce') >= pass_mark).sum()
+                    subj_fails[c] = (pd.to_numeric(df[c], errors='coerce') < pass_mark).sum()
         else:
-            pass_mark = 33
-            for c in subject_cols:
-                subj_passes[c] = (pd.to_numeric(df[c], errors='coerce') >= pass_mark).sum()
-                subj_fails[c] = (pd.to_numeric(df[c], errors='coerce') < pass_mark).sum()
+            subj_passes = pd.Series({k: v['pass'] for k, v in subject_stats.items()})
+            subj_fails = pd.Series({k: v['fail'] for k, v in subject_stats.items()})
 
         # Subject-wise Pass Ratio 
         subj_pass_pct = (subj_passes / (subj_passes + subj_fails)) * 100
@@ -209,7 +299,7 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
     story.append(Paragraph("<b>1. Pass/Fail Distribution:</b> Understand the overarching success metric.", bullet_style))
     story.append(RLImage(pie_chart_path, width=300, height=240))
 
-    if subject_cols:
+    if subject_chart_cols:
         story.append(Spacer(1, 20))
         story.append(Paragraph("<b>PERFORMANCE VISUALIZATIONS & INSIGHTS (Cont.)</b>", heading_style))
         story.append(Paragraph("<b>3. Subject-wise Pass Ratio:</b> Identifies overall course success rates.", bullet_style))
@@ -219,12 +309,12 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
         story.append(RLImage(subj_perf_chart, width=350, height=230))
 
     # --- 3. SUBJECT-WISE PERFORMANCE ANALYSIS ---
-    if subject_cols:
+    if subject_numeric_cols:
         story.append(PageBreak())
         story.append(Paragraph("<b>SUBJECT-WISE PERFORMANCE ANALYSIS</b>", heading_style))
         
         subj_perf_data = [["Subject", "Count", "Mean", "Median", "Min", "Max", "Std Dev"]]
-        for subj in subject_cols:
+        for subj in subject_numeric_cols:
             s_count = df[subj].count()
             s_mean = df[subj].mean()
             s_median = df[subj].median()
@@ -256,16 +346,73 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
         subj_table.setStyle(TableStyle(subj_base_style))
         story.append(subj_table)
         story.append(Spacer(1, 15))
+    elif subject_chart_cols:
+        story.append(PageBreak())
+        story.append(Paragraph("<b>SUBJECT-WISE PERFORMANCE ANALYSIS</b>", heading_style))
+
+        subj_perf_data = [["Subject", "Passed", "Failed", "Pass Rate", "Min Marks", "Max Marks"]]
+        subject_rows = []
+        for subject, stats in subject_stats.items():
+            total = stats["pass"] + stats["fail"]
+            pass_rate_pct = (stats["pass"] / total * 100) if total else 0
+            subject_rows.append((
+                subject,
+                stats["pass"],
+                stats["fail"],
+                pass_rate_pct,
+                stats.get("min_mark"),
+                stats.get("max_mark")
+            ))
+
+        subject_rows.sort(key=lambda row: row[3])
+        for subject, passed, failed, pass_rate_pct, min_mark, max_mark in subject_rows:
+            min_display = f"{min_mark:.0f}" if min_mark is not None else "-"
+            max_display = f"{max_mark:.0f}" if max_mark is not None else "-"
+            subj_perf_data.append([
+                subject.title(),
+                str(passed),
+                str(failed),
+                f"{pass_rate_pct:.1f}%",
+                min_display,
+                max_display,
+            ])
+
+        subj_table = Table(subj_perf_data, colWidths=[140, 70, 70, 80, 70, 70])
+
+        subj_base_style = [
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#2c3e50')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,1), (0,-1), 8),
+            ('BOTTOMPADDING', (0,0), (-1,0), 10),
+            ('GRID', (0,0), (-1,-1), 1, colors.grey)
+        ]
+
+        for i in range(1, len(subj_perf_data)):
+            if i % 2 == 0:
+                subj_base_style.append(('BACKGROUND', (0, i), (-1, i), colors.HexColor('#ecf0f1')))
+            else:
+                subj_base_style.append(('BACKGROUND', (0, i), (-1, i), colors.white))
+
+        subj_table.setStyle(TableStyle(subj_base_style))
+        story.append(subj_table)
+        story.append(Spacer(1, 15))
 
     # --- 4. TOP 10 PERFORMERS ---
     story.append(PageBreak())
     story.append(Paragraph("<b>TOP 10 PERFORMERS</b>", heading_style))
     top10_df = df.sort_values(by='Total_Marks', ascending=False).head(10)
+    max_total_marks = df['Total_Marks'].max() if len(df) > 0 else 0
     
     top_data = [["Rank", "Student Name", "Roll Number", "Total Marks", "Comments"]]
     for idx, row in enumerate(top10_df.iterrows()):
         row_data = row[1]
-        pct = (row_data.get('Total_Marks', 0) / (len(subject_cols)*100) * 100) if subject_cols else 0
+        if subject_numeric_cols:
+            pct = (row_data.get('Total_Marks', 0) / (len(subject_numeric_cols) * 100) * 100)
+        else:
+            pct = (row_data.get('Total_Marks', 0) / max_total_marks * 100) if max_total_marks else 0
         cmt = "Excellent" if pct >= 80 else "Good"
         top_data.append([str(idx+1), str(row_data.get('Name', '')), str(row_data.get('Roll_Number', '')), f"{row_data.get('Total_Marks', 0):.1f}", cmt])
     
@@ -294,14 +441,14 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
 
     # --- 5. STUDENTS REQUIRING SUPPORT ---
     story.append(Paragraph("<b>STUDENTS REQUIRING SUPPORT</b>", heading_style))
-    failed_df = df[df['Status'] == 'FAIL'].sort_values(by='Total_Marks', ascending=True)
+    failed_df = df[df['Derived_Status'] != 'PASS'].sort_values(by='Total_Marks', ascending=True)
     
     crit_subj_style = ParagraphStyle('CritSubj', parent=styles['Normal'], fontSize=7, leading=9, alignment=1) # alignment=1 is Center
     
     support_data = [["Rank", "Roll Number", "Name", "Critical Subjects"]]
     rank = 1
     for _, row in failed_df.iterrows():
-        weak_subjs = [str(col)[:4].title() for col in subject_cols if pd.to_numeric(row.get(col, 100), errors='coerce') < 40]
+        weak_subjs = parse_critical_subjects(row, subject_numeric_cols)
         weak_str = ", ".join(weak_subjs) if weak_subjs else "None"
         # Wrap the critical subjects cell in a Paragraph so it wraps and uses smaller font
         support_data.append([str(rank), str(row.get('Roll_Number', '')), str(row.get('Name', '')), Paragraph(weak_str, crit_subj_style)])

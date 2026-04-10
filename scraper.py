@@ -1,360 +1,446 @@
+import csv
+import logging
+import os
+import random
+import re
+import threading
 import time
-import io
-from PIL import Image
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Dict, Iterable, List, Optional, Tuple
+from urllib.parse import urljoin
+
 import ddddocr
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import Select
+import requests
+from bs4 import BeautifulSoup
+from tqdm import tqdm
 
-shared_driver = None
-shared_ocr = None
+BASE_URL = "https://result.biselahore.com/"
+DEFAULT_TIMEOUT = 12
+DEFAULT_DELAY_RANGE = (2, 5)
+DEFAULT_MAX_ATTEMPTS = 5
+DEFAULT_MAX_WORKERS = 5
 
-def close_browser():
-    global shared_driver
-    if shared_driver:
+DEFAULT_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": BASE_URL,
+    "Origin": BASE_URL,
+    "Connection": "keep-alive",
+}
+
+_logger = logging.getLogger("bise_scraper")
+_thread_local = threading.local()
+
+
+def setup_logging(log_path: str = "scraper.log") -> None:
+    if _logger.handlers:
+        return
+    _logger.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
+
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    _logger.addHandler(file_handler)
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    _logger.addHandler(stream_handler)
+
+
+def get_ocr() -> ddddocr.DdddOcr:
+    if not hasattr(_thread_local, "ocr"):
+        _thread_local.ocr = ddddocr.DdddOcr(show_ad=False)
+    return _thread_local.ocr
+
+
+def create_session() -> requests.Session:
+    session = requests.Session()
+    session.headers.update(DEFAULT_HEADERS)
+    return session
+
+
+def load_roll_numbers(roll_input: str) -> List[int]:
+    roll_numbers: List[int] = []
+    for part in roll_input.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            try:
+                start, end = part.split("-")
+                roll_numbers.extend(range(int(start), int(end) + 1))
+            except ValueError:
+                continue
+        elif part.isdigit():
+            roll_numbers.append(int(part))
+    return roll_numbers
+
+
+def extract_hidden_fields(soup: BeautifulSoup) -> Dict[str, str]:
+    hidden_fields: Dict[str, str] = {}
+    for input_tag in soup.find_all("input", {"type": "hidden"}):
+        name = input_tag.get("name")
+        if not name:
+            continue
+        hidden_fields[name] = input_tag.get("value", "")
+    return hidden_fields
+
+
+def find_captcha_url(soup: BeautifulSoup) -> Optional[str]:
+    captcha_img = soup.find("img", src=lambda value: value and "Captcha" in value)
+    if not captcha_img:
+        return None
+    src = captcha_img.get("src", "")
+    if not src:
+        return None
+    return urljoin(BASE_URL, src)
+
+
+def fetch_form(session: requests.Session) -> BeautifulSoup:
+    response = session.get(BASE_URL, timeout=DEFAULT_TIMEOUT)
+    response.raise_for_status()
+    return BeautifulSoup(response.text, "html.parser")
+
+
+def solve_captcha(session: requests.Session, captcha_url: str) -> str:
+    response = session.get(captcha_url, timeout=DEFAULT_TIMEOUT)
+    response.raise_for_status()
+    captcha_text = get_ocr().classification(response.content)
+    captcha_text = re.sub(r"\s+", "", captcha_text).upper()
+    return captcha_text[:6]
+
+
+def build_payload(
+    roll_no: str,
+    course: str,
+    exam_type: str,
+    year: str,
+    captcha_text: str,
+    hidden_fields: Dict[str, str],
+) -> Dict[str, str]:
+    payload = dict(hidden_fields)
+    payload.update(
+        {
+            "txtFormNo": str(roll_no),
+            "txtCaptcha": captcha_text,
+            "ddlExamType": str(exam_type),
+            "ddlExamYear": str(year),
+            "rdlistCourse": course,
+            "Button1": "View Result",
+        }
+    )
+    return payload
+
+
+def send_request(session: requests.Session, payload: Dict[str, str]) -> str:
+    response = session.post(BASE_URL, data=payload, timeout=DEFAULT_TIMEOUT)
+    response.raise_for_status()
+    return response.text
+
+
+def parse_result_page(html: str) -> Dict[str, str]:
+    soup = BeautifulSoup(html, "html.parser")
+    error_label = soup.find(id="lblError")
+    if error_label:
+        error_text = error_label.get_text(strip=True)
+        if error_text:
+            return {
+                "success": "False",
+                "error": error_text,
+                "error_type": "captcha" if "captcha" in error_text.lower() else "invalid",
+            }
+
+    name_elem = soup.find(id="Name")
+    if not name_elem:
+        return {
+            "success": "False",
+            "error": "Result data not found",
+            "error_type": "missing",
+        }
+
+    name = name_elem.get_text(strip=True)
+    father_name_elem = soup.find(id="lblFatherName")
+    father_name = father_name_elem.get_text(strip=True) if father_name_elem else "N/A"
+
+    total_marks = "0"
+    status = "FAIL"
+    subject_pass = "FAIL/SUPPLY"
+
+    table = soup.find(id="GridStudentData")
+    subject_results: List[str] = []
+    if table:
+        rows = table.find_all("tr")
+        for row in rows[1:-1]:
+            cells = [cell.get_text(strip=True) for cell in row.find_all("td")]
+            if not cells:
+                continue
+            if len(cells) == 6:
+                subject_name, subject_mark, subject_status = cells[0], cells[2], cells[5]
+            elif len(cells) >= 11:
+                subject_name, subject_mark, subject_status = cells[0], cells[5], cells[10]
+            else:
+                continue
+
+            upper_name = subject_name.upper()
+            if "SUBJECT" in upper_name or "MARKS" in upper_name:
+                continue
+
+            subject_results.append(f"{subject_name}:{subject_mark}:{subject_status}")
+
+        if rows:
+            last_row = rows[-1]
+            last_cells = last_row.find_all("td")
+            if last_cells:
+                raw_text = last_cells[-1].get_text(strip=True).upper()
+                if raw_text.isdigit():
+                    status = "PASS"
+                    total_marks = raw_text
+                    subject_pass = ", ".join(subject_results) if subject_results else "All Pass"
+                elif "PASS" in raw_text:
+                    numbers = re.findall(r"\d+", raw_text)
+                    status = "PASS"
+                    total_marks = numbers[0] if numbers else "0"
+                    subject_pass = ", ".join(subject_results) if subject_results else "All Pass"
+                else:
+                    status = "FAIL"
+                    subject_pass = ", ".join(subject_results) if subject_results else raw_text
+
+    return {
+        "success": "True",
+        "Name": name,
+        "Father_Name": father_name,
+        "Total_Marks": total_marks,
+        "Status": status,
+        "Subject_Pass": subject_pass,
+    }
+
+
+def process_roll_number(
+    roll_no: int,
+    course: str,
+    exam_type: str,
+    year: str,
+    max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+    delay_range: Tuple[int, int] = DEFAULT_DELAY_RANGE,
+) -> Dict[str, str]:
+    session = create_session()
+    for attempt in range(1, max_attempts + 1):
+        time.sleep(random.uniform(*delay_range))
         try:
-            shared_driver.quit()
-        except:
+            soup = fetch_form(session)
+            hidden_fields = extract_hidden_fields(soup)
+            captcha_url = find_captcha_url(soup)
+            if not captcha_url:
+                return {
+                    "success": "False",
+                    "error": "Captcha image not found",
+                    "error_type": "missing",
+                }
+
+            captcha_text = solve_captcha(session, captcha_url)
+            payload = build_payload(
+                roll_no=str(roll_no),
+                course=course,
+                exam_type=exam_type,
+                year=year,
+                captcha_text=captcha_text,
+                hidden_fields=hidden_fields,
+            )
+
+            html = send_request(session, payload)
+            result = parse_result_page(html)
+            if result.get("success") == "True":
+                result["Roll_Number"] = str(roll_no)
+                return result
+
+            error_type = result.get("error_type")
+            if error_type == "captcha" and attempt < max_attempts:
+                _logger.info("Captcha failed for roll %s. Retrying...", roll_no)
+                continue
+
+            return result
+        except requests.RequestException as exc:
+            _logger.warning("Request failed for roll %s (attempt %s): %s", roll_no, attempt, exc)
+            if attempt >= max_attempts:
+                return {
+                    "success": "False",
+                    "error": "Request failed after retries",
+                    "error_type": "request",
+                }
+        except Exception as exc:
+            _logger.exception("Unexpected error for roll %s: %s", roll_no, exc)
+            return {
+                "success": "False",
+                "error": "Unexpected parsing error",
+                "error_type": "unexpected",
+            }
+
+    return {
+        "success": "False",
+        "error": "Max attempts exceeded",
+        "error_type": "attempts",
+    }
+
+
+def save_results(rows: Iterable[Dict[str, str]], csv_filename: str = "Student_Results.csv") -> None:
+    rows_list = list(rows)
+    if not rows_list:
+        return
+
+    fieldnames = ["Roll_Number", "Name", "Father_Name", "Total_Marks", "Status", "Subject_Pass"]
+    if os.path.isfile(csv_filename):
+        try:
+            with open(csv_filename, "r", encoding="utf-8") as file:
+                reader = csv.reader(file)
+                existing_headers = next(reader, None)
+                if existing_headers:
+                    fieldnames = existing_headers
+        except Exception:
             pass
-        shared_driver = None
 
-def scrape_bise_lahore_selenium(roll_no, course='HSSC', exam_type='2', year='2024'):
-    global shared_driver, shared_ocr
-    print("\n" + "="*50)
-    print("🚀 Starting Visual Browser Automation...")
-    print("="*50)
-    
-    if shared_ocr is None:
-        print("Loading ddddocr AI model...")
-        shared_ocr = ddddocr.DdddOcr(show_ad=False)
-    ocr = shared_ocr
+    with open(csv_filename, "a", newline="", encoding="utf-8") as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction="ignore")
+        if os.path.getsize(csv_filename) == 0:
+            writer.writeheader()
+        writer.writerows(rows_list)
 
-    if shared_driver is None:
-        print("Starting Background Application Browser...")
-        try:
-            # Try to run Edge headless
-            options = webdriver.EdgeOptions()
-            options.add_argument('--headless=new')
-            options.add_argument('--no-sandbox')
-            options.add_argument('--disable-dev-shm-usage')
-            options.add_experimental_option("excludeSwitches", ["enable-logging"])  
-            shared_driver = webdriver.Edge(options=options)
-        except:
-            try:
-                # Try to run Chrome headless
-                options = webdriver.ChromeOptions()
-                options.add_argument('--headless=new')
-                options.add_argument('--no-sandbox')
-                options.add_argument('--disable-dev-shm-usage')
-                options.add_argument('--disable-gpu') 
-                options.add_argument('--window-size=1920,1080')
-                options.add_experimental_option("excludeSwitches", ["enable-logging"])
-                shared_driver = webdriver.Chrome(options=options)
-            except Exception as e:
-                print("[!] Could not start Edge or Chrome. Make sure you have one installed.")
-                print("Error details:", str(e))
-                return False
 
-    driver = shared_driver
+def scrape_roll_numbers_parallel(
+    roll_numbers: List[int],
+    course: str,
+    exam_type: str,
+    year: str,
+    max_workers: int = DEFAULT_MAX_WORKERS,
+    delay_range: Tuple[int, int] = DEFAULT_DELAY_RANGE,
+    csv_file: str = "Student_Results.csv",
+    progress_callback: Optional[callable] = None,
+    use_tqdm: bool = False,
+) -> Dict[str, object]:
+    setup_logging()
 
-    wait = WebDriverWait(driver, 10)
-    
-    # Max attempts to retry captcha
-    max_attempts = 8
-    
-    for attempt in range(max_attempts):
-        print(f"\n--- Attempt {attempt + 1} of {max_attempts} ---")
-        driver.get("https://result.biselahore.com/")
-        
-        try:
-            # 1. Wait for Captcha image to appear on screen
-            print("Waiting for page and Captcha to load...")
-            captcha_img_elem = wait.until(EC.presence_of_element_located((By.XPATH, "//img[contains(@src, 'Captcha.aspx')]")))
-            
-            # 2. Take a screenshot of the Captcha element right off the browser
-            # ddddocr is a neural network and handles raw images very well, so we don't need to grayscale it.
-            image_bytes = captcha_img_elem.screenshot_as_png
-            
-            print("Solving Captcha automatically with ddddocr AI...")
-            try:
-                # Ask ddddocr to classify the raw PNG image bytes
-                captcha_text = ocr.classification(image_bytes)
-                
-                # Clean up the extracted text and force it to be uppercase just in case
-                captcha_text = captcha_text.replace(" ", "").replace("\n", "").strip().upper()
-                
-                # We know captchas are generally exactly 6 characters
-                if len(captcha_text) > 6:
-                    captcha_text = captcha_text[:6]
-                
-                print("\n" + "="*60)
-                print(f"  [BOT GUESS] >>> The Captcha is: {captcha_text} <<<")
-                print("="*60 + "\n")
-                
-                if len(captcha_text) != 6:
-                    print(f"Warning: The bot only read {len(captcha_text)} characters instead of the expected 6. We will let it try anyway.")
-                    
-            except Exception as e:
-                print("\n[WARNING] Failed to solve captcha using ddddocr.")
-                print(e)
-                # driver.quit()
-                return False
+    results: List[Dict[str, str]] = []
+    failed_rolls: List[int] = []
 
-            # 3. Fill out the form automatically in the browser
-            print("Filling out form fields...")
-            
-            # Course Radio Button ('rdlistCourse')
-            try:
-                # The website hides the actual radio dot using opacity: 0 to style it as a custom checkmark.
-                # Selenium's standard .click() fails on invisible inputs, so we enforce it using Javascript!
-                course_elem = driver.find_element(By.XPATH, f"//input[@name='rdlistCourse' and @value='{course}']")
-                driver.execute_script("arguments[0].click();", course_elem)
-            except Exception as e:
-                print(f"Warning: Could not select Course. Error: {e}")
-                
-            # Roll Number
-            roll_input = driver.find_element(By.ID, "txtFormNo")
-            roll_input.clear()
-            roll_input.send_keys(str(roll_no))
-            
-            # Exam Type Dropdown
-            Select(driver.find_element(By.ID, "ddlExamType")).select_by_value(exam_type)
-            
-            # Exam Year Dropdown
-            Select(driver.find_element(By.ID, "ddlExamYear")).select_by_value(str(year))
-            
-            # Captcha Input
-            captcha_input = driver.find_element(By.ID, "txtCaptcha")
-            captcha_input.clear()
-            captcha_input.send_keys(captcha_text)
-            
-            print("Form filled! Pausing for 5 seconds so you can see exactly what the bot typed before it submits...")
-            time.sleep(5) # Give the user time to visibly read the screen
-            driver.find_element(By.ID, "Button1").click()
-            
-            # 4. Check results or errors
-            time.sleep(2) # Give the page a moment to respond
-            
-            try:
-                # Check if error label appears with text
-                error_label = driver.find_element(By.ID, "lblError")
-                error_text = error_label.text.strip()
-                if error_text:
-                    print("Website returned an error:", error_text)
-                    if "Roll No" in error_text:
-                        print("Stopping: Invalid Roll Number.")
-                        # driver.quit()
-                        return False
-                    else:
-                        print("The ddddocr AI incorrectly guessed the Captcha. Refreshing and retrying...")
-                        continue # loop to next attempt
-            except:
-                pass # No error label exists or is empty, so we probably succeeded!
-                
-            # Check for Success (Result Displayed)
-            try:
-                name_elem = driver.find_element(By.ID, "Name")
-                name = name_elem.text.strip()
-                
-                # Father's name ID is usually lblFatherName
-                try:
-                    father_name = driver.find_element(By.ID, "lblFatherName").text.strip()
-                except:
-                    father_name = "N/A"
-                    
-                # Extract Total Marks securely from the final row of the Marks Grid
-                total_marks = "0"
-                status = "FAIL"
-                subject_pass = "FAIL/SUPPLY"
-                try:
-                    # Finds the table, gets all rows, selects last row, selects last column
-                    marks_table = driver.find_element(By.ID, "GridStudentData") 
-                    all_rows = marks_table.find_elements(By.TAG_NAME, "tr")
-                    
-                    subject_results = []
-                    
-                    for row in all_rows[1:-1]:
-                        cells = row.find_elements(By.TAG_NAME, "td")
-                        if not cells:
-                            continue
-                            
-                        num_cells = len(cells)
-                        
-                        if num_cells == 6:
-                            # Image 1 structure
-                            subj_name = cells[0].text.strip()
-                            subj_mark = cells[2].text.strip()
-                            subj_status = cells[5].text.strip()
-                        elif num_cells >= 11:
-                            # Image 2 structure
-                            subj_name = cells[0].text.strip()
-                            subj_mark = cells[5].text.strip()
-                            subj_status = cells[10].text.strip()
-                        else:
-                            continue
-                            
-                        # Skip header rows that might be caught as td
-                        if "SUBJECT" in subj_name.upper() or "MARKS" in subj_name.upper():
-                            continue
-                            
-                        subject_results.append(f"{subj_name}:{subj_mark}:{subj_status}")
-                                
-                    last_row = all_rows[-1] 
-                    last_cell = last_row.find_elements(By.TAG_NAME, "td")[-1]   
-                    raw_text = last_cell.text.strip().upper()
-                    
-                    import re
-                    if raw_text.isdigit():
-                        status = "PASS"
-                        subject_pass = ", ".join(subject_results) if subject_results else "All Pass"
-                        total_marks = raw_text
-                    elif "PASS" in raw_text:
-                        numbers = re.findall(r'\d+', raw_text)
-                        status = "PASS"
-                        subject_pass = ", ".join(subject_results) if subject_results else "All Pass"
-                        total_marks = numbers[0] if numbers else "0"
-                    else:
-                        status = "FAIL"
-                        subject_pass = ", ".join(subject_results) if subject_results else raw_text # Store the subject list as status or absent
-                        total_marks = "0"
-                except Exception as e:
-                    pass
+    def worker(roll_no: int) -> Tuple[int, Dict[str, str]]:
+        result = process_roll_number(
+            roll_no=roll_no,
+            course=course,
+            exam_type=exam_type,
+            year=year,
+            delay_range=delay_range,
+        )
+        return roll_no, result
 
-                print(f"\n" + "="*50)
-                print(f"🎓 RESULT SUCCESSFULLY EXTRACTED FOR ROLL NO {roll_no}")
-                print(f"  NAME:           {name}")
-                print(f"  FATHER'S NAME:  {father_name}")
-                print(f"  STATUS:         {status}")
-                print(f"  SUBJECT PASS:   {subject_pass}")
-                print(f"  TOTAL MARKS:    {total_marks}")
-                print("="*50)
+    futures = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for roll in roll_numbers:
+            futures.append(executor.submit(worker, roll))
 
-                # Save exactly what you asked for to an Excel-friendly CSV file!
-                import csv
-                import os
+        iterator = as_completed(futures)
+        if use_tqdm:
+            iterator = tqdm(iterator, total=len(futures), desc="Scraping", unit="roll")
 
-                csv_filename = "Student_Results.csv"
-                file_exists = os.path.isfile(csv_filename)
-                
-                fieldnames = ['Roll_Number', 'Name', 'Father_Name', 'Total_Marks', 'Status', 'Subject_Pass']
-                
-                if file_exists:
-                    try:
-                        with open(csv_filename, 'r', encoding='utf-8') as f:
-                            reader = csv.reader(f)
-                            existing_headers = next(reader, None)
-                            if existing_headers:
-                                fieldnames = existing_headers
-                    except Exception:
-                        pass # keep default fieldnames
+        for future in iterator:
+            roll_no, result = future.result()
+            if result.get("success") == "True":
+                results.append(result)
+                save_results([result], csv_file)
+            else:
+                failed_rolls.append(roll_no)
+                _logger.info("Failed roll %s: %s", roll_no, result.get("error"))
 
-                with open(csv_filename, 'a', newline='', encoding='utf-8') as csvfile:
-                    # extrasaction='ignore' prevents errors if a field in the row dictionary isn't in the CSV headers
-                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore') 
+            if progress_callback:
+                progress_callback(roll_no, result)
 
-                    if not file_exists:
-                        writer.writeheader() # Write the columns at the top if file is new
+    if failed_rolls:
+        with open("failed_rolls.txt", "w", encoding="utf-8") as file:
+            file.write(",".join(str(roll) for roll in failed_rolls))
 
-                    writer.writerow({
-                        'Roll_Number': roll_no,
-                        'Name': name,
-                        'Father_Name': father_name,
-                        'Total_Marks': total_marks,
-                        'Status': status,
-                        'Subject_Pass': subject_pass
-                    })
-                
-                print(f"Data saved directly to {csv_filename} instead of downloading HTML!")
-                
-                print("\nStudent scraped successfully! Closing browser and moving to next...")
-                time.sleep(3)
-                # driver.quit()
-                return True
-            except Exception as e:
-                print("Could not find result data on the page. Something unexpected happened.")
-                # driver.quit()
-                return False
-                
-        except Exception as e:
-            print("An error occurred trying to interact with the page:", e)
-            print("Retrying...")
+    return {
+        "total": len(roll_numbers),
+        "success": len(results),
+        "failed": len(failed_rolls),
+        "failed_rolls": failed_rolls,
+    }
 
-    print("\n[!] Exhausted all attempts. The ddddocr AI couldn't guess the Captcha correctly.")
-    # driver.quit()
+
+def scrape_bise_lahore_requests(
+    roll_no: str,
+    course: str = "HSSC",
+    exam_type: str = "2",
+    year: str = "2024",
+) -> bool:
+    result = process_roll_number(
+        roll_no=int(roll_no),
+        course=course,
+        exam_type=exam_type,
+        year=year,
+    )
+    if result.get("success") == "True":
+        save_results([result])
+        return True
     return False
 
 
+def close_browser() -> None:
+    return None
+
+
 if __name__ == "__main__":
+    setup_logging()
     print("-" * 50)
-    print("BISE Lahore Visual Bot")
+    print("BISE Lahore Requests Scraper")
     print("-" * 50)
-    
+
     print("\n--- Enter Roll Numbers ---")
     print("You can enter a single number (123456), multiple numbers split by a comma (123456, 123457),")
-    print("or a range (123456-123460) to scrape multiple students in a row!")
+    print("or a range (123456-123460) to scrape multiple students in a row.")
     roll_input = input("Roll Numbers: ")
-    
-    roll_numbers_to_check = []
-    for part in roll_input.split(','):
-        part = part.strip()
-        if '-' in part:
-            try:
-                start, end = part.split('-')
-                roll_numbers_to_check.extend(range(int(start), int(end) + 1))
-            except:
-                pass
-        elif part.isdigit():
-            roll_numbers_to_check.append(int(part))
-            
+
+    roll_numbers_to_check = load_roll_numbers(roll_input)
     if not roll_numbers_to_check:
         print("No valid roll numbers provided. Exiting.")
-        import sys
-        sys.exit()
+        raise SystemExit(1)
 
-    # Matric / Intermediate
     print("\n--- Select Course ---")
     course_type = input("Enter 'SSC' for Matric, or 'HSSC' for Intermediate (Default is HSSC): ").upper()
-    if not course_type or course_type not in ['SSC', 'HSSC']:
-        course_type = 'HSSC'
+    if not course_type or course_type not in ["SSC", "HSSC"]:
+        course_type = "HSSC"
         print("Defaulting to: HSSC (Intermediate)")
 
-    # Exam Year
     print("\n--- Select Year ---")
     exam_year = input("Enter Year (e.g., 2024 or 2025): ")
     if not exam_year:
-        exam_year = '2024'
+        exam_year = "2024"
         print("Defaulting to: 2024")
-    
-    # Exam Type (Part-1, Part-II, Suppy)
+
     print("\n--- Select Exam Type ---")
     print("0 = Supplementary")
     print("1 = Part-I (Annual)")
     print("2 = Part-II (Annual)")
     exam_type_input = input("Enter Exam Type (0, 1, or 2): ")
-    if not exam_type_input or exam_type_input not in ['0', '1', '2']:
-        exam_type_input = '2'
+    if not exam_type_input or exam_type_input not in ["0", "1", "2"]:
+        exam_type_input = "2"
         print("Defaulting to: 2 (Part-II Annual)")
-    
-    print(f"\n[!] Preparing to scrape {len(roll_numbers_to_check)} roll numbers in sequence...")
-    success_count = 0
-    for index, roll in enumerate(roll_numbers_to_check):
-        print(f"\n{'#'*60}")
-        print(f"# Processing Student {index + 1} of {len(roll_numbers_to_check)} (Roll No: {roll})")
-        print(f"{'#'*60}")
-        success = scrape_bise_lahore_selenium(
-            roll_no=str(roll),
-            course=course_type,
-            exam_type=exam_type_input,
-            year=exam_year
-        )
-        if success:
-            success_count += 1
-    
-    print("\n" + "="*50)
-    print(f"🎉 Scraping Complete!")
-    print(f"Successfully processed {success_count} out of {len(roll_numbers_to_check)} roll numbers.")
-    print("="*50)
-    print("Check Student_Results.csv for the data!")
-    close_browser()
+
+    print("\n--- Concurrency ---")
+    workers_input = input("Max parallel workers (default 5): ").strip()
+    max_workers = int(workers_input) if workers_input.isdigit() else DEFAULT_MAX_WORKERS
+
+    summary = scrape_roll_numbers_parallel(
+        roll_numbers=roll_numbers_to_check,
+        course=course_type,
+        exam_type=exam_type_input,
+        year=exam_year,
+        max_workers=max_workers,
+        use_tqdm=True,
+    )
+
+    print("\n" + "=" * 50)
+    print("Scraping Complete")
+    print(f"Successfully processed {summary['success']} out of {summary['total']} roll numbers.")
+    print("Check Student_Results.csv for the data.")
+    if summary["failed_rolls"]:
+        print("Failed roll numbers saved to failed_rolls.txt")
+    print("=" * 50)

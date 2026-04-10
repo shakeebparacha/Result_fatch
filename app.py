@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, render_template, send_file
-from scraper import scrape_bise_lahore_selenium, close_browser
+from scraper import load_roll_numbers, scrape_roll_numbers_parallel
 import threading
 import csv
 import os
@@ -419,16 +419,7 @@ def get_graph_data():
 def background_scraper(roll_numbers, course, exam_year, exam_type_val):
     """Background scraper worker"""
     global scraping_status
-    roll_list = []
-    for part in roll_numbers.split(','):
-        part = part.strip()
-        if '-' in part:
-            try:
-                start, end = part.split('-')
-                roll_list.extend(range(int(start), int(end) + 1))
-            except: pass
-        elif part.isdigit():
-            roll_list.append(int(part))
+    roll_list = load_roll_numbers(roll_numbers)
 
     total = len(roll_list)
     scraping_status["is_running"] = True
@@ -438,21 +429,31 @@ def background_scraper(roll_numbers, course, exam_year, exam_type_val):
     scraping_status["message"] = f"Initializing scraper for {total} roll numbers..."
 
     print(f"[!] Background worker starting! Processing {total} target(s)...")
-    for roll in roll_list:
-        scraping_status["message"] = f"Processing Roll No: {roll} ({scraping_status['processed'] + 1}/{total})"
-        is_success = scrape_bise_lahore_selenium(
-            roll_no=str(roll),
-            course=course,
-            exam_type=exam_type_val,
-            year=exam_year
-        )
-        if is_success:
-            scraping_status["success"] += 1
-        scraping_status["processed"] += 1
 
-    scraping_status["message"] = f"Finished! Successfully scraped {scraping_status['success']} out of {total} roll numbers."
+    def progress_callback(roll_no, result):
+        scraping_status["processed"] += 1
+        if result.get("success") == "True":
+            scraping_status["success"] += 1
+        scraping_status["message"] = (
+            f"Completed {scraping_status['processed']} of {total} roll numbers. "
+            f"Last roll: {roll_no}"
+        )
+
+    summary = scrape_roll_numbers_parallel(
+        roll_numbers=roll_list,
+        course=course,
+        exam_type=exam_type_val,
+        year=exam_year,
+        max_workers=5,
+        csv_file=CSV_FILE,
+        progress_callback=progress_callback,
+        use_tqdm=False,
+    )
+
+    scraping_status["message"] = (
+        f"Finished! Successfully scraped {summary['success']} out of {total} roll numbers."
+    )
     scraping_status["is_running"] = False
-    close_browser()
     print("\n[!] Background worker finished completely.")
 
 @app.route('/api/scrape', methods=['POST'])
