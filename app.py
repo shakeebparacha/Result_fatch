@@ -14,7 +14,7 @@ from datetime import datetime
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, LongTable
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
@@ -250,8 +250,116 @@ scraping_status = {
     "processed": 0,
     "success": 0,
     "message": "",
-    "job_id": None
+    "job_id": None,
+    "duplicate_rolls": [],
+    "invalid_rolls": [],
+    "failed_rolls": [],
+    "roll_numbers_input": ""
 }
+
+def generate_scrape_status_pdf(
+    roll_numbers_input: str,
+    failed_rolls: list,
+    duplicate_rolls: list,
+    invalid_rolls: list,
+):
+    """Generate a PDF report showing each roll number and its scrape status."""
+    from io import BytesIO
+
+    roll_list, parsed_duplicates, parsed_invalids = load_roll_numbers(roll_numbers_input, return_details=True)
+    failed_set = {str(r).strip() for r in (failed_rolls or []) if str(r).strip()}
+
+    duplicates = [str(r).strip() for r in (duplicate_rolls or []) if str(r).strip()]
+    invalids = [str(r).strip() for r in (invalid_rolls or []) if str(r).strip()]
+    for item in parsed_duplicates:
+        if item not in duplicates:
+            duplicates.append(item)
+    for item in parsed_invalids:
+        if item not in invalids:
+            invalids.append(item)
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5 * inch, bottomMargin=0.5 * inch)
+    story = []
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        'ScrapeTitle',
+        parent=styles['Heading1'],
+        fontSize=20,
+        textColor=colors.HexColor('#1f2937'),
+        spaceAfter=6,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold'
+    )
+    normal_style = ParagraphStyle(
+        'ScrapeNormal',
+        parent=styles['Normal'],
+        fontSize=10,
+        spaceAfter=6
+    )
+
+    story.append(Paragraph("SCRAPE STATUS REPORT", title_style))
+    story.append(Paragraph(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", normal_style))
+    story.append(Spacer(1, 0.2 * inch))
+
+    total = len(roll_list)
+    failed_count = len([r for r in roll_list if str(r) in failed_set])
+    success_count = max(0, total - failed_count)
+
+    summary_data = [
+        ["Metric", "Count"],
+        ["Total Roll Numbers", str(total)],
+        ["Successful", str(success_count)],
+        ["Failed", str(failed_count)],
+        ["Duplicates", str(len(duplicates))],
+        ["Invalid", str(len(invalids))],
+    ]
+
+    summary_table = Table(summary_data, colWidths=[3.5 * inch, 2.0 * inch])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#111827')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTSIZE', (0, 1), (-1, -1), 10),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f3f4f6')]),
+    ]))
+
+    story.append(summary_table)
+    story.append(Spacer(1, 0.3 * inch))
+
+    status_rows = [["Roll Number", "Status"]]
+    for roll in roll_list:
+        roll_str = str(roll)
+        status_label = "FAILED" if roll_str in failed_set else "SUCCESS"
+        status_rows.append([roll_str, status_label])
+
+    for dup in duplicates:
+        status_rows.append([dup, "DUPLICATE"])
+
+    for invalid in invalids:
+        status_rows.append([invalid, "INVALID"])
+
+    status_table = LongTable(status_rows, colWidths=[2.5 * inch, 3.0 * inch], repeatRows=1)
+    status_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f2937')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f9fafb')]),
+    ]))
+
+    story.append(status_table)
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
 
 def build_job_status(job_id: str):
     job = queue.fetch_job(job_id) if queue else None
@@ -469,7 +577,7 @@ def get_graph_data():
 def background_scraper(roll_numbers, course, exam_year, exam_type_val):
     """Background scraper worker"""
     global scraping_status
-    roll_list = load_roll_numbers(roll_numbers)
+    roll_list, duplicates, invalids = load_roll_numbers(roll_numbers, return_details=True)
 
     total = len(roll_list)
     scraping_status["is_running"] = True
@@ -477,6 +585,10 @@ def background_scraper(roll_numbers, course, exam_year, exam_type_val):
     scraping_status["processed"] = 0
     scraping_status["success"] = 0
     scraping_status["message"] = f"Initializing scraper for {total} roll numbers..."
+    scraping_status["duplicate_rolls"] = duplicates
+    scraping_status["invalid_rolls"] = invalids
+    scraping_status["failed_rolls"] = []
+    scraping_status["roll_numbers_input"] = roll_numbers
 
     print(f"[!] Background worker starting! Processing {total} target(s)...")
 
@@ -503,6 +615,7 @@ def background_scraper(roll_numbers, course, exam_year, exam_type_val):
     scraping_status["message"] = (
         f"Finished! Successfully scraped {summary['success']} out of {total} roll numbers."
     )
+    scraping_status["failed_rolls"] = summary.get("failed_rolls", [])
     scraping_status["is_running"] = False
     print("\n[!] Background worker finished completely.")
 
@@ -613,6 +726,39 @@ def download_pdf():
             try: os.remove(temp_csv)
             except: pass
             
+        return response
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/download-scrape-report', methods=['POST'])
+def download_scrape_report():
+    """Generate and download a PDF with roll number scrape status."""
+    try:
+        data = request.json or {}
+        roll_numbers_input = data.get('roll_numbers', '')
+        if not roll_numbers_input:
+            return jsonify({"status": "error", "message": "roll_numbers is required"}), 400
+
+        failed_rolls = data.get('failed_rolls', [])
+        duplicate_rolls = data.get('duplicate_rolls', [])
+        invalid_rolls = data.get('invalid_rolls', [])
+
+        pdf_buffer = generate_scrape_status_pdf(
+            roll_numbers_input=roll_numbers_input,
+            failed_rolls=failed_rolls,
+            duplicate_rolls=duplicate_rolls,
+            invalid_rolls=invalid_rolls,
+        )
+
+        response = send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'Scrape_Report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        )
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
         return response
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500

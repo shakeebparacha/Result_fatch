@@ -1,12 +1,26 @@
 /* ==================== SCRAPER PAGE ==================== */
 
+let lastScrapeStatus = null;
+
 document.addEventListener('DOMContentLoaded', function() {
     const scraperForm = document.getElementById('scraperForm');
     if (scraperForm) {
         scraperForm.addEventListener('submit', handleScraperSubmit);
-        // Check if scraping is already running
-        checkInitialStatus();
     }
+
+    const downloadBtn = document.getElementById('downloadScrapeReportBtn');
+    if (downloadBtn) {
+        downloadBtn.addEventListener('click', () => {
+            if (!lastScrapeStatus) {
+                logToTerminal('> No completed scrape status found yet.', 'terminal-warning');
+                return;
+            }
+            downloadScrapeReport(lastScrapeStatus);
+        });
+    }
+
+    // Check if scraping is already running
+    checkInitialStatus();
 });
 
 function checkInitialStatus() {
@@ -22,6 +36,12 @@ function checkInitialStatus() {
                 terminalContent.innerHTML = '<div class="terminal-line terminal-info">> Resuming active session monitoring...</div>';
                 logToTerminal(`> Scraping task is already in progress.`, 'terminal-success');
                 startPollingStatus();
+                return;
+            }
+
+            if (status.total > 0 && !status.is_running) {
+                lastScrapeStatus = status;
+                enableReportButton();
             }
         })
         .catch(err => console.log('Error checking status:', err));
@@ -39,6 +59,8 @@ function handleScraperSubmit(e) {
         alert('Please enter at least one roll number');
         return;
     }
+
+    localStorage.setItem('scrapeRollNumbers', rollNumbers);
 
     const submitBtn = document.getElementById('submitBtn');
     const terminal = document.getElementById('terminal');
@@ -92,6 +114,7 @@ function startPollingStatus() {
     submitBtn.disabled = true; // Prevent multiple requests
     
     let lastMessage = "";
+    let reportDownloaded = false;
     
     const intervalId = setInterval(() => {
         const jobId = localStorage.getItem('scrapeJobId');
@@ -107,6 +130,8 @@ function startPollingStatus() {
                 if (!status.is_running && status.total > 0) {
                     clearInterval(intervalId);
                     submitBtn.disabled = false;
+                    lastScrapeStatus = status;
+                    enableReportButton();
                     logToTerminal(`> Done! Successfully processed ${status.success} out of ${status.total} students.`, 'terminal-success');
                     logToTerminal(`> Please check the '/results' page to view and visualize the newly added data.`, 'terminal-warning');
                     if (status.duplicate_rolls && status.duplicate_rolls.length > 0) {
@@ -114,6 +139,10 @@ function startPollingStatus() {
                     }
                     if (status.invalid_rolls && status.invalid_rolls.length > 0) {
                         logToTerminal(`> Invalid roll numbers removed: ${status.invalid_rolls.join(', ')}`, 'terminal-warning');
+                    }
+                    if (!reportDownloaded) {
+                        reportDownloaded = true;
+                        // Expected to not auto-download: downloadScrapeReport(status);
                     }
                 }
             })
@@ -123,6 +152,57 @@ function startPollingStatus() {
                 logToTerminal(`> Status check failed or server disconnected.`, 'terminal-warning');
             });
     }, 2000); // Check every 2 seconds
+}
+
+function enableReportButton() {
+    const downloadBtn = document.getElementById('downloadScrapeReportBtn');
+    if (!downloadBtn) {
+        return;
+    }
+    downloadBtn.disabled = false;
+}
+
+function downloadScrapeReport(status) {
+    const rollNumbers = localStorage.getItem('scrapeRollNumbers') || status.roll_numbers_input || '';
+    if (!rollNumbers) {
+        logToTerminal('> PDF report skipped (roll numbers not available).', 'terminal-warning');
+        return;
+    }
+
+    logToTerminal('> Generating scrape summary PDF...', 'terminal-info');
+
+    fetch('/api/download-scrape-report', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            roll_numbers: rollNumbers,
+            failed_rolls: status.failed_rolls || [],
+            duplicate_rolls: status.duplicate_rolls || [],
+            invalid_rolls: status.invalid_rolls || []
+        })
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to generate scrape report');
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Scrape_Report_${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            logToTerminal('> Scrape report downloaded.', 'terminal-success');
+        })
+        .catch(error => {
+            logToTerminal(`> Error generating scrape report: ${error.message}`, 'terminal-warning');
+        });
 }
 
 function logToTerminal(message, className = 'terminal-info') {
