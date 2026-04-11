@@ -503,6 +503,9 @@ select.form-control option {
 }
 
 .search-box {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
     flex: 1;
     min-width: 250px;
 }
@@ -521,6 +524,39 @@ select.form-control option {
     outline: none;
     border-color: var(--primary);
     box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+}
+
+.search-box .search-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.subject-filter-container,
+.column-visibility-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.subject-filter-container {
+    margin-left: auto;
+}
+
+.subject-filter-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    background: white;
+    color: #333;
+    border: 1px solid #ccc;
+    padding: 10px;
+    z-index: 1000;
+    min-width: 180px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    max-height: 220px;
+    overflow-y: auto;
 }
 
 .controls-right {
@@ -904,8 +940,41 @@ select.form-control option {
         gap: 1rem;
     }
 
-    .controls-right {
+    .search-box {
+        width: 100%;
+        min-width: auto;
         flex-direction: column;
+        align-items: stretch;
+    }
+
+    .search-box .select-control {
+        width: 100%;
+    }
+
+    .subject-filter-container,
+    .column-visibility-container {
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .subject-filter-container .btn,
+    .column-visibility-container .btn,
+    .controls-right .btn {
+        width: 100%;
+    }
+
+    .subject-filter-dropdown {
+        left: 0;
+        right: 0;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .controls-right {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
     }
 
     .search-box {
@@ -977,6 +1046,10 @@ select.form-control option {
 
     .section-title h2 {
         font-size: 1.3rem;
+    }
+
+    .controls-right {
+        grid-template-columns: 1fr;
     }
 
     .section-header h1 {
