@@ -6,13 +6,13 @@
 {% block content %}
 <section class="graphs-section">
     <div class="container">
-        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="section-header graphs-header">
             <div>
                 <h1>Data Visualizations</h1>
                 <p>Visual analysis of student performance and results</p>
             </div>
-            <div style="display: flex; gap: 10px; align-items: center;">
-                <select id="classSelectPdf" style="padding: 8px 12px; background: #1e293b; color: white; border: 1px solid #4f46e5; border-radius: 5px;">
+            <div class="graphs-actions">
+                <select id="classSelectPdf" class="select-control graphs-select">
                     <option value="">Select Class (Optional)</option>
                     <option value="9th">9th Class</option>
                     <option value="10th">10th Class</option>
