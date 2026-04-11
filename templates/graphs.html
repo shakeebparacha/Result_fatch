@@ -11,7 +11,14 @@
                 <h1>Data Visualizations</h1>
                 <p>Visual analysis of student performance and results</p>
             </div>
-            <div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <select id="classSelectPdf" style="padding: 8px 12px; background: #1e293b; color: white; border: 1px solid #4f46e5; border-radius: 5px;">
+                    <option value="">Select Class (Optional)</option>
+                    <option value="9th">9th Class</option>
+                    <option value="10th">10th Class</option>
+                    <option value="11th">11th Class</option>
+                    <option value="12th">12th Class</option>
+                </select>
                 <button id="downloadPdfBtn" class="btn btn-primary">
                     📄 Download PDF Report
                 </button>
@@ -112,5 +119,5 @@
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="{{ url_for('static', filename='js/graphs.js') }}"></script>
+<script src="{{ url_for('static', filename='js/graphs.js') }}?v=2"></script>
 {% endblock %}

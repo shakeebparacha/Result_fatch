@@ -12,6 +12,3 @@ redis
 rq
 matplotlib
 numpy
-
-
-tqdm

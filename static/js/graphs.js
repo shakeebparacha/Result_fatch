@@ -83,11 +83,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 return; // User cancelled
             }
 
+            const classSelect = document.getElementById('classSelectPdf');
+            let className = classSelect ? classSelect.value : "";
+
             // Show loading indicator
             pdfBtn.disabled = true;
             pdfBtn.textContent = '⏳ Generating PDF...';
 
-            fetch(`/api/download-pdf?institute_name=${encodeURIComponent(instituteName)}&t=${Date.now()}`, {
+            fetch(`/api/download-pdf?institute_name=${encodeURIComponent(instituteName)}&class_name=${encodeURIComponent(className)}&t=${Date.now()}`, {
                 method: 'GET'
             })
                 .then(response => {

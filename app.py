@@ -694,6 +694,7 @@ def download_pdf():
         import importlib
         importlib.reload(generate_report)
         institute_name = request.args.get('institute_name', 'INSTITUTE OF EXCELLENCE')
+        class_name = request.args.get('class_name', '')
         
         import uuid
         pdf_id = uuid.uuid4().hex
@@ -709,13 +710,15 @@ def download_pdf():
                 pdf_csv_path = temp_csv
 
         pdf_filename = f"Academic_Performance_Report_{pdf_id}.pdf"
-        generate_report.generate_report(csv_file=pdf_csv_path, output_pdf=pdf_filename, institute_name=institute_name)
+        generate_report.generate_report(csv_file=pdf_csv_path, output_pdf=pdf_filename, institute_name=institute_name, class_name=class_name)
+        
+        download_name_prefix = f'{class_name.strip()}_Class_' if class_name and class_name.strip() else 'Academic_'
         
         response = send_file(
             os.path.abspath(pdf_filename),
             mimetype='application/pdf',
             as_attachment=True,
-            download_name=f'Report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+            download_name=f'{download_name_prefix}Performance_Report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
         )
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"

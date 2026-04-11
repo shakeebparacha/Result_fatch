@@ -97,7 +97,7 @@ def parse_critical_subjects(row, subject_numeric_cols):
 
     return weak_subjs
 
-def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Performance_Report.pdf", institute_name="INSTITUTE OF EXCELLENCE"):
+def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Performance_Report.pdf", institute_name="INSTITUTE OF EXCELLENCE", class_name=""):
     if not os.path.exists(csv_file):
         print(f"Error: {csv_file} not found.")
         return
@@ -259,7 +259,12 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
 
     # --- 1. INSTITUTE NAME & EXECUTIVE SUMMARY ---
     story.append(Paragraph(f"<b>{institute_name}</b>", title_style))
-    story.append(Paragraph("<b>Academic Performance Report</b>", ParagraphStyle('SubTitle', parent=title_style, fontSize=16, textColor=colors.gray)))
+    
+    report_title = "Academic Performance Report"
+    if class_name and class_name.strip():
+        report_title = f"{class_name.strip()} Class Performance Report"
+        
+    story.append(Paragraph(f"<b>{report_title}</b>", ParagraphStyle('SubTitle', parent=title_style, fontSize=16, textColor=colors.gray)))
     story.append(Spacer(1, 20))
 
     story.append(Paragraph("<b>EXECUTIVE SUMMARY</b>", heading_style))
