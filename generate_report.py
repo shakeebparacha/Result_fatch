@@ -1,13 +1,20 @@
+import os
+import re
+import sys
+import tempfile
+import uuid
+
+os.environ.setdefault("MPLCONFIGDIR", tempfile.gettempdir())
+
 import pandas as pd
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import sys
-import os
-import re
 
 def derive_status_value(status_value, marks_value):
     status_raw = str(status_value or "").strip()
@@ -151,6 +158,8 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
     subject_chart_cols = subject_numeric_cols if subject_numeric_cols else sorted(subject_stats.keys())
 
     chart_paths = []
+    chart_dir = tempfile.gettempdir()
+    chart_id = uuid.uuid4().hex
 
     # --- Generate Charts ---
     # 1. Pass/Fail Distribution Pie Chart
@@ -158,7 +167,7 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
     plt.pie([total_passed, total_failed], labels=['Passed', 'Failed'], colors=['#4CAF50', '#F44336'], autopct='%1.1f%%', startangle=140)
     plt.title('Overall Pass/Fail Distribution')
     plt.tight_layout()
-    pie_chart_path = "pass_fail_chart.png"
+    pie_chart_path = os.path.join(chart_dir, f"pass_fail_chart_{chart_id}.png")
     plt.savefig(pie_chart_path)
     plt.close()
     chart_paths.append(pie_chart_path)
@@ -216,7 +225,7 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
         plt.xlabel('Pass Percentage (%)')
         plt.xlim(0, 105)
         plt.tight_layout()
-        subj_avg_chart = "subj_avg_chart.png"
+        subj_avg_chart = os.path.join(chart_dir, f"subj_avg_chart_{chart_id}.png")
         plt.savefig(subj_avg_chart)
         plt.close()
         chart_paths.append(subj_avg_chart)
@@ -229,7 +238,7 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
         plt.xlabel('Number of Students')
         plt.legend(loc='lower center', bbox_to_anchor=(0.5, -0.2), ncol=2)
         plt.tight_layout()
-        subj_perf_chart = "subj_perf_chart.png"
+        subj_perf_chart = os.path.join(chart_dir, f"subj_perf_chart_{chart_id}.png")
         plt.savefig(subj_perf_chart)
         plt.close()
         chart_paths.append(subj_perf_chart)

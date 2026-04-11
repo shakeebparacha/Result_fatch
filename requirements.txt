@@ -10,5 +10,7 @@ reportlab
 tqdm
 redis
 rq
+matplotlib
+numpy
 
 
