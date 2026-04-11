@@ -322,7 +322,7 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
         story.append(PageBreak())
         story.append(Paragraph("<b>SUBJECT-WISE PERFORMANCE ANALYSIS</b>", heading_style))
         
-        subj_perf_data = [["Subject", "Count", "Mean", "Median", "Min", "Max", "Std Dev"]]
+        subj_perf_data = [["Subject", "Total Students", "Mean", "Median", "Min", "Max", "Std Dev"]]
         for subj in subject_numeric_cols:
             s_count = df[subj].count()
             s_mean = df[subj].mean()
@@ -333,7 +333,7 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
             
             subj_perf_data.append([subj, f"{s_count}", f"{s_mean:.1f}", f"{s_median:.1f}", f"{s_min:.1f}", f"{s_max:.1f}", f"{s_std:.1f}"])
             
-        subj_table = Table(subj_perf_data, colWidths=[90, 50, 60, 60, 60, 60, 60])
+        subj_table = Table(subj_perf_data, colWidths=[90, 70, 60, 60, 60, 60, 60])
         
         subj_base_style = [
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#2c3e50')),
@@ -359,13 +359,14 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
         story.append(PageBreak())
         story.append(Paragraph("<b>SUBJECT-WISE PERFORMANCE ANALYSIS</b>", heading_style))
 
-        subj_perf_data = [["Subject", "Passed", "Failed", "Pass Rate", "Min Marks", "Max Marks"]]
+        subj_perf_data = [["Subject", "Total Students", "Passed", "Failed", "Pass Rate", "Min", "Max"]]
         subject_rows = []
         for subject, stats in subject_stats.items():
             total = stats["pass"] + stats["fail"]
             pass_rate_pct = (stats["pass"] / total * 100) if total else 0
             subject_rows.append((
                 subject,
+                total,
                 stats["pass"],
                 stats["fail"],
                 pass_rate_pct,
@@ -373,12 +374,13 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
                 stats.get("max_mark")
             ))
 
-        subject_rows.sort(key=lambda row: row[3])
-        for subject, passed, failed, pass_rate_pct, min_mark, max_mark in subject_rows:
+        subject_rows.sort(key=lambda row: row[4])
+        for subject, total, passed, failed, pass_rate_pct, min_mark, max_mark in subject_rows:
             min_display = f"{min_mark:.0f}" if min_mark is not None else "-"
             max_display = f"{max_mark:.0f}" if max_mark is not None else "-"
             subj_perf_data.append([
                 subject.title(),
+                str(total),
                 str(passed),
                 str(failed),
                 f"{pass_rate_pct:.1f}%",
@@ -386,7 +388,7 @@ def generate_report(csv_file="Student_Results.csv", output_pdf="Academic_Perform
                 max_display,
             ])
 
-        subj_table = Table(subj_perf_data, colWidths=[140, 70, 70, 80, 70, 70])
+        subj_table = Table(subj_perf_data, colWidths=[120, 80, 50, 50, 70, 60, 60])
 
         subj_base_style = [
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#2c3e50')),
