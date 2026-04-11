@@ -381,7 +381,7 @@ def scrape_roll_numbers_parallel(
     delay_range = normalize_delay_range(delay_range)
     flush_every = max(1, int(flush_every))
 
-    results: List[Dict[str, str]] = []
+    success_count = 0
     failed_rolls: List[int] = []
     pending_rows: List[Dict[str, str]] = []
 
@@ -407,7 +407,7 @@ def scrape_roll_numbers_parallel(
         for future in iterator:
             roll_no, result = future.result()
             if result.get("success") == "True":
-                results.append(result)
+                success_count += 1
                 pending_rows.append(result)
                 if len(pending_rows) >= flush_every:
                     save_results(pending_rows, csv_file)
@@ -429,7 +429,7 @@ def scrape_roll_numbers_parallel(
 
     return {
         "total": len(roll_numbers),
-        "success": len(results),
+        "success": success_count,
         "failed": len(failed_rolls),
         "failed_rolls": failed_rolls,
     }

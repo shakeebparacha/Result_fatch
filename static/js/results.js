@@ -135,7 +135,7 @@ function loadResults() {
             allData = data.data || [];
             filteredData = [...allData];
             currentPage = 1;
-            extractFailedSubjects();
+            extractSubjectStatuses();
             extractDynamicSubjects();
             renderTableHeader();
             renderTable();
@@ -151,9 +151,53 @@ function loadResults() {
 
 let selectedSubjects = [];
 
-function extractFailedSubjects() {
-    const subjectsArray = ['PASS', 'FAIL'];
+function extractSubjectStatuses() {
+    const subjectsSet = new Set();
+
+    allData.forEach(row => {
+        const subjectStatuses = getRowSubjectStatuses(row);
+        subjectStatuses.forEach(label => subjectsSet.add(label));
+    });
+
+    const subjectsArray = Array.from(subjectsSet).sort((a, b) => a.localeCompare(b));
     renderSubjectFilter(subjectsArray);
+}
+
+function getRowSubjectStatuses(row) {
+    const subjectStatuses = [];
+    const raw = (row.Subject_Pass || '').trim();
+
+    if (!raw || raw === '-' || raw.toLowerCase() === 'all pass') {
+        return subjectStatuses;
+    }
+
+    if (!raw.includes(':')) {
+        return subjectStatuses;
+    }
+
+    const parts = raw.split(',');
+    parts.forEach(part => {
+        const cleaned = part.trim();
+        if (!cleaned) {
+            return;
+        }
+
+        const pieces = cleaned.split(':');
+        if (pieces.length < 2) {
+            return;
+        }
+
+        const subject = (pieces[0] || '').trim();
+        const statusRaw = (pieces[pieces.length - 1] || '').trim();
+        if (!subject || !statusRaw) {
+            return;
+        }
+
+        const status = statusRaw.toUpperCase();
+        subjectStatuses.push(`${subject}:${status}`);
+    });
+
+    return subjectStatuses;
 }
 
 function renderSubjectFilter(subjects) {
@@ -219,8 +263,8 @@ function applyFilters() {
         
         let matchesSubject = true;
         if (selectedSubjects.length > 0) {
-            const status = (row.Status || '').toUpperCase();
-            matchesSubject = selectedSubjects.includes(status);
+            const rowSubjectStatuses = getRowSubjectStatuses(row);
+            matchesSubject = rowSubjectStatuses.some(label => selectedSubjects.includes(label));
         }
 
         return matchesSearch && matchesSubject;

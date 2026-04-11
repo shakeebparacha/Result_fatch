@@ -1,8 +1,5 @@
 from flask import Flask, request, jsonify, render_template, send_file
-from redis import Redis
-from rq import Queue
 from scraper import load_roll_numbers, scrape_roll_numbers_parallel
-from tasks import run_scrape_job
 import threading
 import csv
 import os
@@ -25,9 +22,29 @@ app = Flask(__name__, template_folder='templates')
 
 # Ensure Student_Results.csv is in the correct location
 CSV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Student_Results.csv')
+RQ_IMPORT_ERROR = None
+try:
+    from redis import Redis
+    from rq import Queue
+except Exception as exc:
+    Redis = None
+    Queue = None
+    RQ_IMPORT_ERROR = exc
+
+run_scrape_job = None
+
 REDIS_URL = os.getenv("REDIS_URL")
-redis_conn = Redis.from_url(REDIS_URL) if REDIS_URL else None
-queue = Queue(connection=redis_conn) if redis_conn else None
+redis_conn = None
+queue = None
+if REDIS_URL and Redis and Queue:
+    try:
+        redis_conn = Redis.from_url(REDIS_URL)
+        queue = Queue(connection=redis_conn)
+    except Exception as exc:
+        print(f"Warning: Redis/RQ disabled ({exc}).")
+        queue = None
+elif REDIS_URL and RQ_IMPORT_ERROR:
+    print(f"Warning: RQ not available ({RQ_IMPORT_ERROR}).")
 
 # ================== PDF GENERATION FUNCTIONS ==================
 
@@ -492,7 +509,7 @@ def background_scraper(roll_numbers, course, exam_year, exam_type_val):
 @app.route('/api/scrape', methods=['POST'])
 def start_scraping():
     """Start background scraping task"""
-    global scraping_status
+    global scraping_status, queue, run_scrape_job
     if queue and scraping_status.get("job_id"):
         current_status = build_job_status(scraping_status["job_id"])
         if not current_status.get("is_running"):
@@ -500,6 +517,14 @@ def start_scraping():
     if scraping_status["is_running"]:
         return jsonify({"status": "error", "message": "A scraping task is already running."}), 400
     try:
+        if queue and run_scrape_job is None:
+            try:
+                from tasks import run_scrape_job as _run_scrape_job
+                run_scrape_job = _run_scrape_job
+            except Exception as exc:
+                print(f"Warning: RQ job disabled ({exc}).")
+                queue = None
+
         data = request.json
         roll_numbers = data.get('rollNumbers', '')
         course = data.get('courseType', 'HSSC')
